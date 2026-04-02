@@ -2,64 +2,44 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkerKind {
-    TargetLayerText,
-    TargetSingleText,
-    TargetLayerAudio,
-    TargetSingleAudio,
+    TargetLayer,
+    TargetSingle,
     Memo,
 }
 
 impl MarkerKind {
     pub fn marker_name(self) -> &'static str {
         match self {
-            Self::TargetLayerText => TARGET_LAYER_TEXT_MARKER_NAME,
-            Self::TargetSingleText => TARGET_SINGLE_TEXT_MARKER_NAME,
-            Self::TargetLayerAudio => TARGET_LAYER_AUDIO_MARKER_NAME,
-            Self::TargetSingleAudio => TARGET_SINGLE_AUDIO_MARKER_NAME,
+            Self::TargetLayer => TARGET_LAYER_MARKER_NAME,
+            Self::TargetSingle => TARGET_SINGLE_MARKER_NAME,
             Self::Memo => MEMO_MARKER_NAME,
         }
     }
 }
 
-pub const TARGET_LAYER_TEXT_MARKER_NAME: &str = "校正対象（レイヤー、テキスト）@proofread.aux2";
-pub const TARGET_SINGLE_TEXT_MARKER_NAME: &str = "校正対象（単一、テキスト）@proofread.aux2";
-pub const TARGET_LAYER_AUDIO_MARKER_NAME: &str = "校正対象（レイヤー、音声）@proofread.aux2";
-pub const TARGET_SINGLE_AUDIO_MARKER_NAME: &str = "校正対象（単一、音声）@proofread.aux2";
+pub const TARGET_LAYER_MARKER_NAME: &str = "校正対象（レイヤー）@proofread.aux2";
+pub const TARGET_SINGLE_MARKER_NAME: &str = "校正対象（単一）@proofread.aux2";
 pub const MEMO_MARKER_NAME: &str = "校正メモ@proofread.aux2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MarkerSpec {
     as_object: bool,
     video: bool,
-    audio: bool,
 }
 
 fn marker_spec(kind: MarkerKind) -> MarkerSpec {
     match kind {
-        MarkerKind::TargetLayerText => MarkerSpec {
+        MarkerKind::TargetLayer => MarkerSpec {
             as_object: true,
             video: true,
-            audio: false,
         },
-        MarkerKind::TargetSingleText => MarkerSpec {
+        MarkerKind::TargetSingle => MarkerSpec {
             as_object: false,
             video: true,
-            audio: false,
-        },
-        MarkerKind::TargetLayerAudio => MarkerSpec {
-            as_object: true,
-            video: false,
-            audio: true,
-        },
-        MarkerKind::TargetSingleAudio => MarkerSpec {
-            as_object: false,
-            video: false,
-            audio: true,
         },
         MarkerKind::Memo => MarkerSpec {
             as_object: false,
             video: true,
-            audio: false,
         },
     }
 }
@@ -83,7 +63,6 @@ fn build_filter_table(kind: MarkerKind) -> aviutl2::filter::FilterPluginTable {
         flags: aviutl2::bitflag! {
             aviutl2::filter::FilterPluginFlags {
                 video: spec.video,
-                audio: spec.audio,
                 as_object: spec.as_object,
             }
         },
@@ -94,7 +73,6 @@ fn build_filter_table(kind: MarkerKind) -> aviutl2::filter::FilterPluginTable {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetType {
     Text,
-    Audio,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,15 +115,15 @@ pub fn attach_memos(targets: &mut [CollectedTarget], memo_by_target_id: &HashMap
 }
 
 #[aviutl2::plugin(FilterPlugin)]
-pub struct TargetLayerTextMarker;
+pub struct TargetLayerMarker;
 
-impl aviutl2::filter::FilterPlugin for TargetLayerTextMarker {
+impl aviutl2::filter::FilterPlugin for TargetLayerMarker {
     fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
         Ok(Self)
     }
 
     fn plugin_info(&self) -> aviutl2::filter::FilterPluginTable {
-        build_filter_table(MarkerKind::TargetLayerText)
+        build_filter_table(MarkerKind::TargetLayer)
     }
 
     fn proc_video(
@@ -158,63 +136,21 @@ impl aviutl2::filter::FilterPlugin for TargetLayerTextMarker {
 }
 
 #[aviutl2::plugin(FilterPlugin)]
-pub struct TargetSingleTextMarker;
+pub struct TargetSingleMarker;
 
-impl aviutl2::filter::FilterPlugin for TargetSingleTextMarker {
+impl aviutl2::filter::FilterPlugin for TargetSingleMarker {
     fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
         Ok(Self)
     }
 
     fn plugin_info(&self) -> aviutl2::filter::FilterPluginTable {
-        build_filter_table(MarkerKind::TargetSingleText)
+        build_filter_table(MarkerKind::TargetSingle)
     }
 
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
         _video: &mut aviutl2::filter::FilterProcVideo,
-    ) -> aviutl2::AnyResult<()> {
-        Ok(())
-    }
-}
-
-#[aviutl2::plugin(FilterPlugin)]
-pub struct TargetLayerAudioMarker;
-
-impl aviutl2::filter::FilterPlugin for TargetLayerAudioMarker {
-    fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
-        Ok(Self)
-    }
-
-    fn plugin_info(&self) -> aviutl2::filter::FilterPluginTable {
-        build_filter_table(MarkerKind::TargetLayerAudio)
-    }
-
-    fn proc_audio(
-        &self,
-        _config: &[aviutl2::filter::FilterConfigItem],
-        _audio: &mut aviutl2::filter::FilterProcAudio,
-    ) -> aviutl2::AnyResult<()> {
-        Ok(())
-    }
-}
-
-#[aviutl2::plugin(FilterPlugin)]
-pub struct TargetSingleAudioMarker;
-
-impl aviutl2::filter::FilterPlugin for TargetSingleAudioMarker {
-    fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
-        Ok(Self)
-    }
-
-    fn plugin_info(&self) -> aviutl2::filter::FilterPluginTable {
-        build_filter_table(MarkerKind::TargetSingleAudio)
-    }
-
-    fn proc_audio(
-        &self,
-        _config: &[aviutl2::filter::FilterConfigItem],
-        _audio: &mut aviutl2::filter::FilterProcAudio,
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
@@ -270,10 +206,8 @@ mod tests {
 
     #[test]
     fn marker_as_object_flags_match_spec() {
-        assert!(marker_spec(MarkerKind::TargetLayerText).as_object);
-        assert!(!marker_spec(MarkerKind::TargetSingleText).as_object);
-        assert!(marker_spec(MarkerKind::TargetLayerAudio).as_object);
-        assert!(!marker_spec(MarkerKind::TargetSingleAudio).as_object);
+        assert!(marker_spec(MarkerKind::TargetLayer).as_object);
+        assert!(!marker_spec(MarkerKind::TargetSingle).as_object);
         assert!(!marker_spec(MarkerKind::Memo).as_object);
     }
 }

@@ -35,15 +35,21 @@
 - [x] プロンプトのプロジェクト保存
   - [x] `on_project_load/on_project_save` で `ProjectFile::deserialize/serialize` を利用
   - [x] `serde` で `project_prompt` をプロジェクト単位で保存・復元
+- [x] プロジェクト走査による実マーカー収集
+  - [x] `EDIT_HANDLE` 経由でレイヤー/オブジェクト走査
+  - [x] 対象ID・レイヤー名・開始時間・色・メモの収集
+  - [x] レイヤー対象/単一対象（テキスト・音声）マーカーを判定
 - [x] テスト/整形
   - [x] `cargo fmt`
-  - [x] `cargo test`（現状 8 tests pass）
+  - [x] `cargo test`（現状 12 tests pass）
 
 ## 未着手 / 次段
 
-- [ ] プロジェクト走査による実マーカー収集（ID/レイヤー/開始時間/色/メモの解決）
 - [ ] 「校正を開始」から `ProofreadService` 実行までのUI接続
+- [x] 「校正を開始」から `ProofreadService` 実行までのUI接続
 - [ ] 結果画面への実レスポンス反映（優先度表示の整形含む）
+  - [x] `all/details` の基本表示
+  - [ ] 優先度表示（低/中/高）の整形
 - [ ] 「ジャンプ」実装（対象位置へカーソル移動）
 - [ ] 「メモを追加」実装（対象へ `校正メモ` 付与）
 - [ ] 音声文字起こし（`whisper-rs`）と音声対象の校正入力対応

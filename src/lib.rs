@@ -4,6 +4,7 @@ pub mod gui;
 pub mod marker;
 pub mod prompt;
 pub mod result;
+pub mod scan;
 pub mod service;
 
 use std::sync::{Arc, Mutex};
@@ -14,15 +15,15 @@ pub struct ProjectData {
 }
 
 const PROJECT_DATA_KEY: &str = "proofread_project_data";
+pub static EDIT_HANDLE: aviutl2::generic::GlobalEditHandle =
+    aviutl2::generic::GlobalEditHandle::new();
 
 #[aviutl2::plugin(GenericPlugin)]
 struct ProofreadPlugin {
     gui: aviutl2_eframe::EframeWindow,
     state: Arc<Mutex<ProjectData>>,
-    marker_target_layer_text: aviutl2::generic::SubPlugin<marker::TargetLayerTextMarker>,
-    marker_target_single_text: aviutl2::generic::SubPlugin<marker::TargetSingleTextMarker>,
-    marker_target_layer_audio: aviutl2::generic::SubPlugin<marker::TargetLayerAudioMarker>,
-    marker_target_single_audio: aviutl2::generic::SubPlugin<marker::TargetSingleAudioMarker>,
+    marker_target_layer: aviutl2::generic::SubPlugin<marker::TargetLayerMarker>,
+    marker_target_single: aviutl2::generic::SubPlugin<marker::TargetSingleMarker>,
     marker_memo: aviutl2::generic::SubPlugin<marker::MemoMarker>,
 }
 
@@ -35,10 +36,8 @@ impl aviutl2::generic::GenericPlugin for ProofreadPlugin {
                 gui::create_gui(cc, handle, Arc::clone(&ui_state))
             })?,
             state,
-            marker_target_layer_text: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
-            marker_target_single_text: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
-            marker_target_layer_audio: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
-            marker_target_single_audio: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
+            marker_target_layer: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
+            marker_target_single: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
             marker_memo: aviutl2::generic::SubPlugin::new_filter_plugin(&info)?,
         })
     }
@@ -54,11 +53,10 @@ impl aviutl2::generic::GenericPlugin for ProofreadPlugin {
         if let Ok(handle) = self.gui.handle() {
             let _ = registry.register_window_client("proofread.aux2", &handle);
         }
+        EDIT_HANDLE.init(registry.create_edit_handle());
 
-        registry.register_filter_plugin(&self.marker_target_layer_text);
-        registry.register_filter_plugin(&self.marker_target_single_text);
-        registry.register_filter_plugin(&self.marker_target_layer_audio);
-        registry.register_filter_plugin(&self.marker_target_single_audio);
+        registry.register_filter_plugin(&self.marker_target_layer);
+        registry.register_filter_plugin(&self.marker_target_single);
         registry.register_filter_plugin(&self.marker_memo);
     }
 

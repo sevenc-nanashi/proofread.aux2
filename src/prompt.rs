@@ -6,16 +6,14 @@ pub fn build_prompt(
     targets: &[CollectedTarget],
 ) -> String {
     let mut out = String::new();
-    out.push_str(
-        "あなたは動画の校正者です。以下の情報をもとに、動画のテキストと音声を校正してください。\n",
-    );
+    out.push_str("あなたは動画の校正者です。以下の情報をもとに、動画のテキストを校正し、修正するべき点を指摘してください。\n\n");
     out.push_str("出力は以下のフォーマットを用いてください：\n");
     out.push_str("```json\n");
     out.push_str("{\n");
     out.push_str("  \"all\": \"全体の指摘・コメント\",\n");
     out.push_str("  \"details\": [\n");
     out.push_str("    {\n");
-    out.push_str("      \"id\": \"テキストや音声のID\",\n");
+    out.push_str("      \"id\": \"テキストのID\",\n");
     out.push_str("      \"priority\": \"指摘の優先度（'low', 'medium', 'high'のいずれか）\",\n");
     out.push_str("      \"comment\": \"個別の指摘・コメント\"\n");
     out.push_str("    }\n");
@@ -24,13 +22,12 @@ pub fn build_prompt(
     out.push_str("```\n\n");
     out.push_str("# 注意\n");
     out.push_str("- テキストの色は校正の際に重要な情報となります。\n");
-    out.push_str("- 音声の文字起こしには誤りが含まれている可能性があります。\n");
-    out.push_str("- AIの指摘は提案であり、必ずしも正しいとは限りません。\n\n");
+    out.push_str("- 修正する必要のないところはノーコメントで構いません。\n");
     out.push_str("# ユーザー指定プロンプト\n");
     out.push_str(project_prompt);
     out.push_str("\n\n# プロジェクトの情報\n");
     out.push_str(project_info);
-    out.push_str("\n\n# 校正対象のテキストと音声\n");
+    out.push_str("\n\n# 校正対象のテキスト\n");
 
     for target in targets {
         out.push_str("## ");
@@ -39,7 +36,6 @@ pub fn build_prompt(
         out.push_str("種別：");
         out.push_str(match target.target_type {
             TargetType::Text => "テキスト",
-            TargetType::Audio => "音声",
         });
         out.push('\n');
         if let Some(color) = &target.color {

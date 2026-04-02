@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 [dependencies]
 aviutl2 = { version = "0.22.0", features = ["serde"] }
 aviutl2-eframe = "0.22.0"
-whisper-rs = "0.16.0"
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

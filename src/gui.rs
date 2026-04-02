@@ -1,14 +1,16 @@
 use aviutl2_eframe::{AviUtl2EframeHandle, eframe, egui};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use crate::ProjectData;
 use crate::config::{Credentials, Preset, credentials_path, load_credentials, save_credentials};
 use crate::result::ProofreadResult;
+use crate::service::ProofreadService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
     SetupRun,
     Settings,
+    Running,
     Result,
 }
 
@@ -20,6 +22,7 @@ pub(crate) struct ProofreadGuiApp {
     credentials_path: Option<std::path::PathBuf>,
     credentials: Credentials,
     status_message: Option<String>,
+    proofreading_rx: Option<mpsc::Receiver<Result<ProofreadResult, String>>>,
 }
 
 impl ProofreadGuiApp {
@@ -78,6 +81,7 @@ impl ProofreadGuiApp {
             credentials_path,
             credentials,
             status_message,
+            proofreading_rx: None,
         }
     }
 
@@ -96,6 +100,10 @@ impl ProofreadGuiApp {
 
     fn render_setup_run(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
+            if let Some(message) = &self.status_message {
+                ui.label(message);
+                ui.add_space(8.0);
+            }
             if ui
                 .add_sized(
                     egui::vec2(ui.available_width(), 40.0),
@@ -103,7 +111,7 @@ impl ProofreadGuiApp {
                 )
                 .clicked()
             {
-                self.screen = Screen::Result;
+                self.start_proofread();
             }
             ui.add_space(12.0);
             ui.label("プロンプト:");
@@ -193,6 +201,10 @@ impl ProofreadGuiApp {
 
     fn render_result(&mut self, ui: &mut egui::Ui) {
         egui::CentralPanel::default().show_inside(ui, |ui| {
+            if let Some(message) = &self.status_message {
+                ui.label(message);
+                ui.add_space(8.0);
+            }
             if ui
                 .add_sized(
                     egui::vec2(ui.available_width(), 32.0),
@@ -205,6 +217,7 @@ impl ProofreadGuiApp {
             ui.add_space(8.0);
             ui.group(|ui| {
                 ui.label("全体の指摘・コメント");
+                ui.separator();
                 let all = self
                     .result
                     .as_ref()
@@ -232,14 +245,88 @@ impl ProofreadGuiApp {
             });
         });
     }
+
+    fn render_running(&mut self, ui: &mut egui::Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            ui.centered_and_justified(|ui| {
+                ui.vertical(|ui| {
+                    ui.heading("校正中...");
+                    ui.label("AIに問い合わせています。しばらくお待ちください。");
+                });
+            });
+            ui.request_repaint_after(std::time::Duration::from_millis(100));
+        });
+    }
+
+    fn start_proofread(&mut self) {
+        self.status_message = None;
+        let project_prompt = self
+            .state
+            .lock()
+            .expect("project state lock poisoned")
+            .project_prompt
+            .clone();
+        let project_info = match crate::scan::collect_project_info() {
+            Ok(v) => v,
+            Err(err) => {
+                self.status_message = Some(format!("プロジェクト情報の取得に失敗しました: {err}"));
+                return;
+            }
+        };
+        let targets = match crate::scan::collect_marked_targets() {
+            Ok(v) => v,
+            Err(err) => {
+                self.status_message = Some(format!("校正対象の収集に失敗しました: {err}"));
+                return;
+            }
+        };
+
+        let credentials = self.credentials.clone();
+        let (tx, rx) = mpsc::channel::<Result<ProofreadResult, String>>();
+        std::thread::spawn(move || {
+            let run_result =
+                ProofreadService::run(&project_info, &project_prompt, &targets, &credentials)
+                    .map_err(|err| err.to_string());
+            let _ = tx.send(run_result);
+        });
+        self.proofreading_rx = Some(rx);
+        self.screen = Screen::Running;
+    }
+
+    fn poll_proofreading_result(&mut self) {
+        let Some(rx) = &self.proofreading_rx else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(Ok(result)) => {
+                self.result = Some(result);
+                self.status_message = Some("校正が完了しました。".to_string());
+                self.screen = Screen::Result;
+                self.proofreading_rx = None;
+            }
+            Ok(Err(err_message)) => {
+                self.status_message = Some(format!("校正に失敗しました: {err_message}"));
+                self.screen = Screen::SetupRun;
+                self.proofreading_rx = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.status_message = Some("校正処理が中断されました。".to_string());
+                self.screen = Screen::SetupRun;
+                self.proofreading_rx = None;
+            }
+        }
+    }
 }
 
 impl eframe::App for ProofreadGuiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll_proofreading_result();
         self.render_header(ui);
         match self.screen {
             Screen::SetupRun => self.render_setup_run(ui),
             Screen::Settings => self.render_settings(ui),
+            Screen::Running => self.render_running(ui),
             Screen::Result => self.render_result(ui),
         }
     }
