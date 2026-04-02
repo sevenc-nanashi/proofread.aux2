@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Preset {
     Gemini,
@@ -47,6 +47,17 @@ pub struct PresetDefaults {
 }
 
 impl Preset {
+    pub const ALL: [Self; 4] = [Self::Gemini, Self::ChatGpt, Self::Claude, Self::OpenRouter];
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Gemini => "Gemini",
+            Self::ChatGpt => "ChatGPT",
+            Self::Claude => "Claude",
+            Self::OpenRouter => "OpenRouter",
+        }
+    }
+
     pub fn defaults(self) -> PresetDefaults {
         match self {
             Self::Gemini => PresetDefaults {

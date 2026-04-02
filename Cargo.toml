@@ -8,7 +8,7 @@ name = "proofread_aux2"
 crate-type = ["cdylib"]
 
 [dependencies]
-aviutl2 = "0.22.0"
+aviutl2 = { version = "0.22.0", features = ["serde"] }
 aviutl2-eframe = "0.22.0"
 whisper-rs = "0.16.0"
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
