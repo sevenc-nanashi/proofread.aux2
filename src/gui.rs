@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, mpsc};
 
 use crate::ProjectData;
 use crate::config::{Credentials, Preset, credentials_path, load_credentials, save_credentials};
-use crate::result::ProofreadResult;
+use crate::result::{DetailAction, ProofreadResult, parse_detail_comment_actions};
 use crate::service::ProofreadService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,15 +229,57 @@ impl ProofreadGuiApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if let Some(result) = &self.result {
                     for detail in &result.details {
+                        let parsed = parse_detail_comment_actions(&detail.comment);
                         ui.group(|ui| {
                             ui.label(format!("位置: {}", detail.id));
-                            ui.label(format!("優先度: {:?}", detail.priority));
+                            ui.label(format!("優先度: {}", detail.priority.label_ja()));
                             ui.horizontal(|ui| {
-                                ui.add(egui::Button::new("ジャンプ"));
-                                ui.add(egui::Button::new("メモを追加"));
+                                if ui.add(egui::Button::new("ジャンプ")).clicked() {
+                                    self.status_message = Some(
+                                        "ジャンプ機能は未実装です。記法付きボタンもしくは今後の実装を利用してください。"
+                                            .to_string(),
+                                    );
+                                }
+                                if ui.add(egui::Button::new("メモを追加")).clicked() {
+                                    self.status_message =
+                                        Some("メモ追加機能は未実装です。".to_string());
+                                }
                             });
+                            if !parsed.actions.is_empty() {
+                                ui.add_space(4.0);
+                                ui.horizontal_wrapped(|ui| {
+                                    for action in &parsed.actions {
+                                        match action {
+                                            DetailAction::Jump { label, target_id } => {
+                                                if ui
+                                                    .add(egui::Button::new(format!(
+                                                        "ジャンプ: {label}"
+                                                    )))
+                                                    .clicked()
+                                                {
+                                                    self.status_message = Some(format!(
+                                                        "ジャンプ機能は未実装です（対象ID: {target_id}）。"
+                                                    ));
+                                                }
+                                            }
+                                            DetailAction::Suggestion { replacement } => {
+                                                if ui
+                                                    .add(egui::Button::new(
+                                                        "テキストをこの範囲内で置き換える",
+                                                    ))
+                                                    .clicked()
+                                                {
+                                                    self.status_message = Some(format!(
+                                                        "置換適用機能は未実装です（候補: {replacement}）。"
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            }
                             ui.separator();
-                            ui.label(&detail.comment);
+                            ui.label(&parsed.body);
                         });
                         ui.add_space(4.0);
                     }

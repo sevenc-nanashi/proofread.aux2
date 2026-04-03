@@ -23,6 +23,8 @@ pub fn build_prompt(
     out.push_str("# 注意\n");
     out.push_str("- テキストの色は校正の際に重要な情報となります。\n");
     out.push_str("- 修正する必要のないところはノーコメントで構いません。\n");
+    out.push_str("- ジャンプ操作を提案したい場合、comment内に `$[jump ボタン表示名 対象ID]` を埋め込んでください。例: `$[jump このオブジェクト l10-f32-n10]`\n");
+    out.push_str("- テキスト置換提案を出したい場合、comment内に `$[suggestion 置換後テキスト]` を埋め込んでください。改行は `\\n` で表現できます。例: `$[suggestion 置換後テキスト、\\n改行も入れられる]`\n");
     out.push_str("# ユーザー指定プロンプト\n");
     out.push_str(project_prompt);
     out.push_str("\n\n# プロジェクトの情報\n");
@@ -85,5 +87,7 @@ mod tests {
         assert!(prompt.contains("視聴者は中学生"));
         assert!(prompt.contains("## t-1"));
         assert!(prompt.contains("色：#ffffff"));
+        assert!(prompt.contains("$[jump ボタン表示名 対象ID]"));
+        assert!(prompt.contains("$[suggestion 置換後テキスト]"));
     }
 }
