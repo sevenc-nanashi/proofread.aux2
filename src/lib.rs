@@ -9,9 +9,25 @@ pub mod service;
 
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProjectData {
+    #[serde(default = "default_prompt_template_id")]
+    pub prompt_template_id: String,
+    #[serde(default)]
     pub project_prompt: String,
+}
+
+impl Default for ProjectData {
+    fn default() -> Self {
+        Self {
+            prompt_template_id: default_prompt_template_id(),
+            project_prompt: String::new(),
+        }
+    }
+}
+
+fn default_prompt_template_id() -> String {
+    prompt::BUILTIN_TEMPLATE_ID.to_string()
 }
 
 const PROJECT_DATA_KEY: &str = "proofread_project_data";

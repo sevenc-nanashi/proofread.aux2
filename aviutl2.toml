@@ -9,7 +9,7 @@ version = "0.1.0"
 aviutl2_version = "latest"
 
 [artifacts.proofread_aux2-aux2]
-destination = "Plugin/proofread_aux2.aux2"
+destination = "Plugin/proofread_aux2/proofread_aux2.aux2"
 
 [artifacts.proofread_aux2-aux2.profiles.debug]
 build = "cargo build"

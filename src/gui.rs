@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, mpsc};
 
 use crate::ProjectData;
 use crate::config::{Credentials, Preset, credentials_path, load_credentials, save_credentials};
+use crate::prompt::{self, PromptTemplate};
 use crate::result::{DetailAction, ProofreadResult, parse_detail_comment_actions};
 use crate::service::ProofreadService;
 
@@ -21,6 +22,7 @@ pub(crate) struct ProofreadGuiApp {
     result: Option<ProofreadResult>,
     credentials_path: Option<std::path::PathBuf>,
     credentials: Credentials,
+    prompt_templates: Vec<PromptTemplate>,
     status_message: Option<String>,
     proofreading_rx: Option<mpsc::Receiver<Result<ProofreadResult, String>>>,
 }
@@ -49,7 +51,19 @@ impl ProofreadGuiApp {
             style.visuals = aviutl2_eframe::aviutl2_visuals();
         });
 
-        let (screen, credentials_path, credentials, status_message) = match credentials_path() {
+        let mut startup_statuses = Vec::new();
+        let prompt_templates = match prompt::list_prompt_templates() {
+            Ok(v) => v,
+            Err(err) => {
+                startup_statuses.push(format!("prompts フォルダの初期化に失敗しました: {err}"));
+                vec![PromptTemplate {
+                    id: prompt::BUILTIN_TEMPLATE_ID.to_string(),
+                    label: prompt::BUILTIN_TEMPLATE_LABEL.to_string(),
+                }]
+            }
+        };
+
+        let (screen, credentials_path, credentials, credentials_status) = match credentials_path() {
             Ok(path) => match load_credentials(&path) {
                 Ok(credentials) => (Screen::SetupRun, Some(path), credentials, None),
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => (
@@ -72,6 +86,14 @@ impl ProofreadGuiApp {
                 Some(format!("保存先の解決に失敗しました: {err}")),
             ),
         };
+        if let Some(message) = credentials_status {
+            startup_statuses.push(message);
+        }
+        let status_message = if startup_statuses.is_empty() {
+            None
+        } else {
+            Some(startup_statuses.join("\n"))
+        };
 
         Self {
             _handle: handle,
@@ -80,6 +102,7 @@ impl ProofreadGuiApp {
             result: None,
             credentials_path,
             credentials,
+            prompt_templates,
             status_message,
             proofreading_rx: None,
         }
@@ -104,6 +127,37 @@ impl ProofreadGuiApp {
                 ui.label(message);
                 ui.add_space(8.0);
             }
+            ui.horizontal(|ui| {
+                ui.label("プロンプトテンプレート:");
+
+                let mut state = self.state.lock().expect("project state lock poisoned");
+                if !self
+                    .prompt_templates
+                    .iter()
+                    .any(|v| v.id == state.prompt_template_id)
+                {
+                    state.prompt_template_id = prompt::BUILTIN_TEMPLATE_ID.to_string();
+                }
+                let selected_id = state.prompt_template_id.clone();
+
+                egui::ComboBox::from_id_salt("prompt_template")
+                    .selected_text(self.label_for_template(&selected_id))
+                    .show_ui(ui, |ui| {
+                        for template in &self.prompt_templates {
+                            ui.selectable_value(
+                                &mut state.prompt_template_id,
+                                template.id.clone(),
+                                template.label.clone(),
+                            );
+                        }
+                    });
+                drop(state);
+
+                if ui.button("再読込").clicked() {
+                    self.reload_prompt_templates();
+                }
+            });
+            ui.add_space(8.0);
             if ui
                 .add_sized(
                     egui::vec2(ui.available_width(), 40.0),
@@ -302,12 +356,13 @@ impl ProofreadGuiApp {
 
     fn start_proofread(&mut self) {
         self.status_message = None;
-        let project_prompt = self
-            .state
-            .lock()
-            .expect("project state lock poisoned")
-            .project_prompt
-            .clone();
+        let (project_prompt, prompt_template_id) = {
+            let state = self.state.lock().expect("project state lock poisoned");
+            (
+                state.project_prompt.clone(),
+                state.prompt_template_id.clone(),
+            )
+        };
         let project_info = match crate::scan::collect_project_info() {
             Ok(v) => v,
             Err(err) => {
@@ -326,13 +381,40 @@ impl ProofreadGuiApp {
         let credentials = self.credentials.clone();
         let (tx, rx) = mpsc::channel::<Result<ProofreadResult, String>>();
         std::thread::spawn(move || {
-            let run_result =
-                ProofreadService::run(&project_info, &project_prompt, &targets, &credentials)
-                    .map_err(|err| err.to_string());
+            let run_result = ProofreadService::run(
+                &prompt_template_id,
+                &project_info,
+                &project_prompt,
+                &targets,
+                &credentials,
+            )
+            .map_err(|err| err.to_string());
             let _ = tx.send(run_result);
         });
         self.proofreading_rx = Some(rx);
         self.screen = Screen::Running;
+    }
+
+    fn label_for_template(&self, id: &str) -> String {
+        self.prompt_templates
+            .iter()
+            .find(|v| v.id == id)
+            .map(|v| v.label.clone())
+            .unwrap_or_else(|| format!("不明なテンプレート: {id}"))
+    }
+
+    fn reload_prompt_templates(&mut self) {
+        match prompt::list_prompt_templates() {
+            Ok(v) => {
+                self.prompt_templates = v;
+                self.status_message = Some("プロンプトテンプレートを再読込しました。".to_string());
+            }
+            Err(err) => {
+                self.status_message = Some(format!(
+                    "プロンプトテンプレートの再読込に失敗しました: {err}"
+                ));
+            }
+        }
     }
 
     fn poll_proofreading_result(&mut self) {
