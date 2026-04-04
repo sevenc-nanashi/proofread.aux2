@@ -177,8 +177,8 @@ mod tests {
     }
 
     #[test]
-    fn color_extraction_formats_integer() {
-        let alias: aviutl2::alias::Table = "[Object.0]\r\n文字色=16711680"
+    fn color_extraction() {
+        let alias: aviutl2::alias::Table = "[Object.0]\r\n文字色=ff0000"
             .parse()
             .expect("table parse");
         let color = extract_color_from_alias(&alias);

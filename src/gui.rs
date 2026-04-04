@@ -281,7 +281,7 @@ impl ProofreadGuiApp {
             });
             ui.add_space(8.0);
             egui::ScrollArea::vertical().show(ui, |ui| {
-                if let Some(result) = &self.result {
+                if let Some(result) = self.result.clone() {
                     for detail in &result.details {
                         let parsed = parse_detail_comment_actions(&detail.comment);
                         ui.group(|ui| {
@@ -289,10 +289,7 @@ impl ProofreadGuiApp {
                             ui.label(format!("優先度: {}", detail.priority.label_ja()));
                             ui.horizontal(|ui| {
                                 if ui.add(egui::Button::new("ジャンプ")).clicked() {
-                                    self.status_message = Some(
-                                        "ジャンプ機能は未実装です。記法付きボタンもしくは今後の実装を利用してください。"
-                                            .to_string(),
-                                    );
+                                    self.jump_to_target_id(&detail.id);
                                 }
                                 if ui.add(egui::Button::new("メモを追加")).clicked() {
                                     self.status_message =
@@ -309,9 +306,7 @@ impl ProofreadGuiApp {
                                         CommentPart::Action { label, action } => match action {
                                             DetailAction::Jump { target_id } => {
                                                 if ui.link(label).clicked() {
-                                                    self.status_message = Some(format!(
-                                                        "ジャンプ機能は未実装です（対象ID: {target_id}）。"
-                                                    ));
+                                                    self.jump_to_target_id(target_id);
                                                 }
                                             }
                                             DetailAction::Suggestion { replacement } => {
@@ -408,6 +403,46 @@ impl ProofreadGuiApp {
         }
     }
 
+    fn jump_to_target_id(&mut self, target_id: &str) {
+        let (layer, frame) = match parse_target_id(target_id) {
+            Ok(v) => v,
+            Err(err) => {
+                self.status_message = Some(format!("ジャンプIDが不正です（{target_id}）: {err}"));
+                return;
+            }
+        };
+
+        match crate::EDIT_HANDLE.call_edit_section(|edit| {
+            edit.set_cursor_layer_frame(layer, frame)?;
+            edit.set_display_layer_frame(layer, frame)?;
+            if let Some(handle) = edit.find_object_after(layer, frame)? {
+                edit.focus_object(&handle)?;
+                Ok::<bool, aviutl2::generic::EditSectionError>(true)
+            } else {
+                Ok::<bool, aviutl2::generic::EditSectionError>(false)
+            }
+        }) {
+            Ok(Ok(true)) => {
+                self.status_message = Some(format!(
+                    "ジャンプして対象オブジェクトを選択しました（L{layer}, F{frame}）。"
+                ));
+            }
+            Ok(Ok(false)) => {
+                self.status_message = Some(format!(
+                    "ジャンプしました（L{layer}, F{frame} / オブジェクト未検出）。"
+                ));
+            }
+            Ok(Err(err)) => {
+                self.status_message =
+                    Some(format!("ジャンプ処理に失敗しました（{target_id}）: {err}"));
+            }
+            Err(err) => {
+                self.status_message =
+                    Some(format!("ジャンプ処理に失敗しました（{target_id}）: {err}"));
+            }
+        }
+    }
+
     fn poll_proofreading_result(&mut self) {
         let Some(rx) = &self.proofreading_rx else {
             return;
@@ -434,6 +469,26 @@ impl ProofreadGuiApp {
     }
 }
 
+fn parse_target_id(input: &str) -> Result<(usize, usize), &'static str> {
+    let mut layer = None;
+    let mut frame = None;
+    for part in input.split('-') {
+        if let Some(v) = part.strip_prefix('l') {
+            layer = v.parse::<usize>().ok();
+            continue;
+        }
+        if let Some(v) = part.strip_prefix('f') {
+            frame = v.parse::<usize>().ok();
+            continue;
+        }
+    }
+    match (layer, frame) {
+        (Some(layer), Some(frame)) => Ok((layer, frame)),
+        (None, _) => Err("layer が見つかりません"),
+        (_, None) => Err("frame が見つかりません"),
+    }
+}
+
 impl eframe::App for ProofreadGuiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_proofreading_result();
@@ -453,4 +508,21 @@ pub(crate) fn create_gui(
     state: Arc<Mutex<ProjectData>>,
 ) -> Result<Box<dyn eframe::App>, Box<dyn std::error::Error + Send + Sync>> {
     Ok(Box::new(ProofreadGuiApp::new(cc, handle, state)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_target_id;
+
+    #[test]
+    fn parse_target_id_extracts_layer_and_frame() {
+        assert_eq!(parse_target_id("l10-f32-n10").ok(), Some((10, 32)));
+    }
+
+    #[test]
+    fn parse_target_id_rejects_invalid_input() {
+        assert!(parse_target_id("f32-n10").is_err());
+        assert!(parse_target_id("l10-n10").is_err());
+        assert!(parse_target_id("abc").is_err());
+    }
 }

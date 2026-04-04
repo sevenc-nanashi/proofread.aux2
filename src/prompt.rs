@@ -187,7 +187,7 @@ mod tests {
         let prompt = build_prompt(BUILTIN_TEMPLATE_ID, "project", "視聴者は中学生", &targets)
             .expect("must render");
         assert!(prompt.contains("# 注意"));
-        assert!(prompt.contains("# ユーザー指定プロンプト"));
+        assert!(prompt.contains("# プロジェクトに関する特記事項"));
         assert!(prompt.contains("視聴者は中学生"));
         assert!(prompt.contains("## t-1"));
         assert!(prompt.contains("色：#ffffff"));
