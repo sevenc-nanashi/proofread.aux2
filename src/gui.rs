@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use crate::ProjectData;
 use crate::config::{Credentials, Preset, credentials_path, load_credentials, save_credentials};
 use crate::prompt::{self, PromptTemplate};
-use crate::result::{DetailAction, ProofreadResult, parse_detail_comment_actions};
+use crate::result::{CommentPart, DetailAction, ProofreadResult, parse_detail_comment_actions};
 use crate::service::ProofreadService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -299,41 +299,32 @@ impl ProofreadGuiApp {
                                         Some("メモ追加機能は未実装です。".to_string());
                                 }
                             });
-                            if !parsed.actions.is_empty() {
-                                ui.add_space(4.0);
-                                ui.horizontal_wrapped(|ui| {
-                                    for action in &parsed.actions {
-                                        match action {
-                                            DetailAction::Jump { label, target_id } => {
-                                                if ui
-                                                    .add(egui::Button::new(format!(
-                                                        "ジャンプ: {label}"
-                                                    )))
-                                                    .clicked()
-                                                {
+                            ui.separator();
+                            ui.horizontal_wrapped(|ui| {
+                                for part in &parsed.parts {
+                                    match part {
+                                        CommentPart::Text(text) => {
+                                            ui.label(text);
+                                        }
+                                        CommentPart::Action { label, action } => match action {
+                                            DetailAction::Jump { target_id } => {
+                                                if ui.link(label).clicked() {
                                                     self.status_message = Some(format!(
                                                         "ジャンプ機能は未実装です（対象ID: {target_id}）。"
                                                     ));
                                                 }
                                             }
                                             DetailAction::Suggestion { replacement } => {
-                                                if ui
-                                                    .add(egui::Button::new(
-                                                        "テキストをこの範囲内で置き換える",
-                                                    ))
-                                                    .clicked()
-                                                {
+                                                if ui.link(label).clicked() {
                                                     self.status_message = Some(format!(
                                                         "置換適用機能は未実装です（候補: {replacement}）。"
                                                     ));
                                                 }
                                             }
-                                        }
+                                        },
                                     }
-                                });
-                            }
-                            ui.separator();
-                            ui.label(&parsed.body);
+                                }
+                            });
                         });
                         ui.add_space(4.0);
                     }

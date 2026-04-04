@@ -119,7 +119,12 @@ fn extract_content_from_alias(alias: &aviutl2::alias::Table) -> Option<String> {
             if k == "テキスト" {
                 let trimmed = v.trim();
                 if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
+                    return Some(
+                        trimmed
+                            .replace("\\n", "\n")
+                            .replace("\\t", "\t")
+                            .replace("\\\\", "\\"),
+                    );
                 }
             }
         }

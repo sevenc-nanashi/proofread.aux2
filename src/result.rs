@@ -39,62 +39,69 @@ impl ProofreadResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DetailAction {
-    Jump { label: String, target_id: String },
+    Jump { target_id: String },
     Suggestion { replacement: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedDetailComment {
-    pub body: String,
-    pub actions: Vec<DetailAction>,
+    pub parts: Vec<CommentPart>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommentPart {
+    Text(String),
+    Action { label: String, action: DetailAction },
 }
 
 pub fn parse_detail_comment_actions(input: &str) -> ParsedDetailComment {
-    let mut body = String::new();
-    let mut actions = Vec::new();
+    let mut parts = Vec::new();
     let mut cursor = input;
 
     loop {
         let Some(start) = cursor.find("$[") else {
-            body.push_str(cursor);
+            if !cursor.is_empty() {
+                parts.push(CommentPart::Text(cursor.to_string()));
+            }
             break;
         };
         let (head, tail) = cursor.split_at(start);
-        body.push_str(head);
-        let Some(end_rel) = tail.find(']') else {
-            body.push_str(tail);
-            break;
-        };
-
-        let (directive, rest) = tail.split_at(end_rel + 1);
-        let inner = &directive[2..directive.len() - 1];
-        if let Some(action) = parse_directive(inner) {
-            actions.push(action);
-        } else {
-            body.push_str(directive);
+        if !head.is_empty() {
+            parts.push(CommentPart::Text(head.to_string()));
         }
-        cursor = rest;
+
+        let Some(end_rel) = tail.find(']') else {
+            parts.push(CommentPart::Text(tail.to_string()));
+            continue;
+        };
+        let directive = &tail[2..end_rel];
+
+        if let Some((label, action)) = parse_directive(directive) {
+            parts.push(CommentPart::Action { label, action });
+            cursor = &tail[(end_rel + 1)..];
+        } else {
+            let raw = &tail[..(end_rel + 1)];
+            parts.push(CommentPart::Text(raw.to_string()));
+            cursor = &tail[(end_rel + 1)..];
+        }
     }
 
-    ParsedDetailComment {
-        body: body.trim().to_string(),
-        actions,
-    }
+    ParsedDetailComment { parts }
 }
 
-fn parse_directive(input: &str) -> Option<DetailAction> {
+fn parse_directive(input: &str) -> Option<(String, DetailAction)> {
     let trimmed = input.trim();
     if let Some(rest) = trimmed.strip_prefix("jump ") {
-        let mut parts = rest.split_whitespace().collect::<Vec<_>>();
-        if parts.len() < 2 {
+        let mut tokens = rest.split_whitespace().collect::<Vec<_>>();
+        if tokens.len() < 2 {
             return None;
         }
-        let target_id = parts.pop()?.to_string();
-        let label = parts.join(" ");
+        let target_id = tokens.pop()?.to_string();
+        let label = tokens.join(" ");
         if label.is_empty() || target_id.is_empty() {
             return None;
         }
-        return Some(DetailAction::Jump { label, target_id });
+        return Some((label, DetailAction::Jump { target_id }));
     }
 
     if let Some(rest) = trimmed.strip_prefix("suggestion ") {
@@ -102,7 +109,10 @@ fn parse_directive(input: &str) -> Option<DetailAction> {
         if replacement.is_empty() {
             return None;
         }
-        return Some(DetailAction::Suggestion { replacement });
+        return Some((
+            replacement.clone(),
+            DetailAction::Suggestion { replacement },
+        ));
     }
 
     None
@@ -110,7 +120,9 @@ fn parse_directive(input: &str) -> Option<DetailAction> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DetailAction, Priority, ProofreadResult, parse_detail_comment_actions};
+    use super::{
+        CommentPart, DetailAction, Priority, ProofreadResult, parse_detail_comment_actions,
+    };
 
     #[test]
     fn parses_valid_result_json() {
@@ -145,36 +157,52 @@ mod tests {
     #[test]
     fn parses_jump_directive() {
         let parsed = parse_detail_comment_actions(
-            "ここを確認してください。$[jump このオブジェクト l10-f32-n10]",
+            "位置は$[jump このオブジェクト l10-f32-n10]を確認してください。",
         );
-        assert_eq!(parsed.body, "ここを確認してください。");
         assert_eq!(
-            parsed.actions,
-            vec![DetailAction::Jump {
-                label: "このオブジェクト".to_string(),
-                target_id: "l10-f32-n10".to_string()
-            }]
+            parsed.parts,
+            vec![
+                CommentPart::Text("位置は".to_string()),
+                CommentPart::Action {
+                    label: "このオブジェクト".to_string(),
+                    action: DetailAction::Jump {
+                        target_id: "l10-f32-n10".to_string()
+                    }
+                },
+                CommentPart::Text("を確認してください。".to_string())
+            ]
         );
     }
 
     #[test]
     fn parses_suggestion_directive() {
         let parsed = parse_detail_comment_actions(
-            "改善案です。$[suggestion 置換後テキスト、\\n改行も入れられる]",
+            "改善案として$[suggestion 置換後テキスト、\\n改行も入れられる]を適用できます。",
         );
-        assert_eq!(parsed.body, "改善案です。");
         assert_eq!(
-            parsed.actions,
-            vec![DetailAction::Suggestion {
-                replacement: "置換後テキスト、\n改行も入れられる".to_string()
-            }]
+            parsed.parts,
+            vec![
+                CommentPart::Text("改善案として".to_string()),
+                CommentPart::Action {
+                    label: "置換後テキスト、\n改行も入れられる".to_string(),
+                    action: DetailAction::Suggestion {
+                        replacement: "置換後テキスト、\n改行も入れられる".to_string()
+                    }
+                },
+                CommentPart::Text("を適用できます。".to_string())
+            ]
         );
     }
 
     #[test]
-    fn keeps_unknown_directive_in_body() {
-        let parsed = parse_detail_comment_actions("x $[unknown y]");
-        assert_eq!(parsed.body, "x $[unknown y]");
-        assert!(parsed.actions.is_empty());
+    fn keeps_unknown_directive_as_text() {
+        let parsed = parse_detail_comment_actions("x $[unknown z]");
+        assert_eq!(
+            parsed.parts,
+            vec![
+                CommentPart::Text("x ".to_string()),
+                CommentPart::Text("$[unknown z]".to_string())
+            ]
+        );
     }
 }
