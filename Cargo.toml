@@ -4,14 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "proofread_aux2"
 crate-type = ["cdylib"]
+name = "proofread_aux2"
 
 [dependencies]
-aviutl2 = { version = "0.22.0", features = ["serde"] }
-aviutl2-eframe = "0.22.0"
-reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-handlebars = "6.3.2"
+aviutl2 = { version = "0.40.0", features = ["serde"] }
+aviutl2-eframe = "0.40.0"
+handlebars = "6.4.1"
 process_path = "0.1.4"
+reqwest = { version = "0.13.4", features = ["blocking", "json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+
+[patch.crates-io]
+aviutl2 = { git = "https://github.com/sevenc-nanashi/aviutl2-rs", branch = "main" }
+aviutl2-eframe = { git = "https://github.com/sevenc-nanashi/aviutl2-rs", branch = "main" }

@@ -24,7 +24,7 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
 
         for layer in edit.layers() {
             for (_, object) in layer.objects() {
-                let caller = edit.object(&object);
+                let caller = edit.object(object);
                 if caller.count_effect(TARGET_LAYER_MARKER_NAME)? > 0 {
                     layer_text_targets.insert(layer.index);
                 }
@@ -38,13 +38,12 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
             let layer_name = layer.get_name()?.unwrap_or_else(|| {
                 format!(
                     "{}{}",
-                    aviutl2::config::get_language_text("Name", "Layer")
-                        .unwrap_or("Layer".to_string()),
+                    aviutl2::config::get_language_text("Name", "Layer"),
                     layer.index + 1
                 )
             });
             for (position, object) in layer.objects() {
-                let caller = edit.object(&object);
+                let caller = edit.object(object);
                 if caller.count_effect(TARGET_LAYER_MARKER_NAME)? > 0 {
                     continue;
                 }
@@ -79,7 +78,9 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
     })?
 }
 
-fn extract_memo(caller: &aviutl2::generic::EditSectionObjectCaller<'_>) -> Option<String> {
+fn extract_memo<S: aviutl2::generic::ReadSectionProvider>(
+    caller: &aviutl2::generic::EditSectionObjectCaller<'_, S>,
+) -> Option<String> {
     if caller.count_effect(MEMO_MARKER_NAME).ok()? == 0 {
         return None;
     }
@@ -178,9 +179,8 @@ mod tests {
 
     #[test]
     fn color_extraction() {
-        let alias: aviutl2::alias::Table = "[Object.0]\r\n文字色=ff0000"
-            .parse()
-            .expect("table parse");
+        let alias: aviutl2::alias::Table =
+            "[Object.0]\r\n文字色=ff0000".parse().expect("table parse");
         let color = extract_color_from_alias(&alias);
         assert_eq!(color.as_deref(), Some("#FF0000"));
     }

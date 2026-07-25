@@ -23,22 +23,22 @@ pub const MEMO_MARKER_NAME: &str = "校正メモ@proofread.aux2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MarkerSpec {
-    as_object: bool,
+    input: bool,
     video: bool,
 }
 
 fn marker_spec(kind: MarkerKind) -> MarkerSpec {
     match kind {
         MarkerKind::TargetLayer => MarkerSpec {
-            as_object: true,
+            input: true,
             video: true,
         },
         MarkerKind::TargetSingle => MarkerSpec {
-            as_object: false,
+            input: false,
             video: true,
         },
         MarkerKind::Memo => MarkerSpec {
-            as_object: false,
+            input: false,
             video: true,
         },
     }
@@ -63,7 +63,7 @@ fn build_filter_table(kind: MarkerKind) -> aviutl2::filter::FilterPluginTable {
         flags: aviutl2::bitflag! {
             aviutl2::filter::FilterPluginFlags {
                 video: spec.video,
-                as_object: spec.as_object,
+                input: spec.input,
             }
         },
         config_items,
@@ -206,8 +206,8 @@ mod tests {
 
     #[test]
     fn marker_as_object_flags_match_spec() {
-        assert!(marker_spec(MarkerKind::TargetLayer).as_object);
-        assert!(!marker_spec(MarkerKind::TargetSingle).as_object);
-        assert!(!marker_spec(MarkerKind::Memo).as_object);
+        assert!(marker_spec(MarkerKind::TargetLayer).input);
+        assert!(!marker_spec(MarkerKind::TargetSingle).input);
+        assert!(!marker_spec(MarkerKind::Memo).input);
     }
 }

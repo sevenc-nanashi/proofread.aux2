@@ -33,19 +33,7 @@ impl ProofreadGuiApp {
         handle: AviUtl2EframeHandle,
         state: Arc<Mutex<ProjectData>>,
     ) -> Self {
-        let mut fonts = egui::FontDefinitions::default();
-        fonts.font_data.insert(
-            "M+ 1p".to_owned(),
-            std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
-                "./fonts/mplus-1p-regular.ttf"
-            ))),
-        );
-        fonts
-            .families
-            .get_mut(&egui::FontFamily::Proportional)
-            .expect("Failed to get Proportional font family")
-            .insert(0, "M+ 1p".to_owned());
-        cc.egui_ctx.set_fonts(fonts);
+        cc.egui_ctx.set_fonts(aviutl2_eframe::aviutl2_fonts());
 
         cc.egui_ctx.all_styles_mut(|style| {
             style.visuals = aviutl2_eframe::aviutl2_visuals();
@@ -108,12 +96,17 @@ impl ProofreadGuiApp {
         }
     }
 
+    fn clear_status_message(&mut self) {
+        self.status_message = None;
+    }
+
     fn render_header(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::top("toolbar").show_inside(ui, |ui| {
+        egui::Panel::top("toolbar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("proofread.aux2");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("設定").clicked() {
+                        self.clear_status_message();
                         self.screen = Screen::Settings;
                     }
                 });
@@ -122,7 +115,7 @@ impl ProofreadGuiApp {
     }
 
     fn render_setup_run(&mut self, ui: &mut egui::Ui) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if let Some(message) = &self.status_message {
                 ui.label(message);
                 ui.add_space(8.0);
@@ -178,7 +171,7 @@ impl ProofreadGuiApp {
             ui.add_sized(
                 egui::vec2(ui.available_width(), ui.available_height()),
                 egui::TextEdit::multiline(&mut project_prompt)
-                    .hint_text("どのような動画か、どのような視聴者かなどを入力"),
+                    .hint_text("どのような動画か、どのような視聴者層かなどを入力"),
             );
             if let Ok(mut state) = self.state.lock() {
                 state.project_prompt = project_prompt;
@@ -187,7 +180,7 @@ impl ProofreadGuiApp {
     }
 
     fn render_settings(&mut self, ui: &mut egui::Ui) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if let Some(message) = &self.status_message {
                 ui.label(message);
                 ui.add_space(8.0);
@@ -226,23 +219,17 @@ impl ProofreadGuiApp {
                 && !self.credentials.base_url.trim().is_empty()
                 && !self.credentials.model.trim().is_empty()
                 && !self.credentials.api_key.trim().is_empty();
-            let save_response = ui.add_enabled(
-                can_save,
-                egui::Button::new("保存").min_size(egui::vec2(
-                    ui.available_width(),
-                    ui.spacing().interact_size.y,
-                )),
-            );
-            if save_response.clicked() {
-                if let Some(path) = &self.credentials_path {
-                    match save_credentials(path, &self.credentials) {
-                        Ok(_) => {
-                            self.status_message = Some("設定を保存しました。".to_string());
-                            self.screen = Screen::SetupRun;
-                        }
-                        Err(err) => {
-                            self.status_message = Some(format!("設定の保存に失敗しました: {err}"));
-                        }
+            let save_response = ui.add_enabled(can_save, egui::Button::new("保存"));
+            if save_response.clicked()
+                && let Some(path) = &self.credentials_path
+            {
+                match save_credentials(path, &self.credentials) {
+                    Ok(_) => {
+                        self.status_message = Some("設定を保存しました。".to_string());
+                        self.screen = Screen::SetupRun;
+                    }
+                    Err(err) => {
+                        self.status_message = Some(format!("設定の保存に失敗しました: {err}"));
                     }
                 }
             }
@@ -254,7 +241,7 @@ impl ProofreadGuiApp {
     }
 
     fn render_result(&mut self, ui: &mut egui::Ui) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if let Some(message) = &self.status_message {
                 ui.label(message);
                 ui.add_space(8.0);
@@ -266,6 +253,7 @@ impl ProofreadGuiApp {
                 )
                 .clicked()
             {
+                self.clear_status_message();
                 self.screen = Screen::SetupRun;
             }
             ui.add_space(8.0);
@@ -329,7 +317,7 @@ impl ProofreadGuiApp {
     }
 
     fn render_running(&mut self, ui: &mut egui::Ui) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.centered_and_justified(|ui| {
                 ui.vertical(|ui| {
                     ui.heading("校正中...");
@@ -378,6 +366,7 @@ impl ProofreadGuiApp {
             let _ = tx.send(run_result);
         });
         self.proofreading_rx = Some(rx);
+        self.clear_status_message();
         self.screen = Screen::Running;
     }
 
@@ -416,29 +405,21 @@ impl ProofreadGuiApp {
             edit.set_cursor_layer_frame(layer, frame)?;
             edit.set_display_layer_frame(layer, frame)?;
             if let Some(handle) = edit.find_object_after(layer, frame)? {
-                edit.focus_object(&handle)?;
+                edit.set_focus_object(Some(handle))?;
                 Ok::<bool, aviutl2::generic::EditSectionError>(true)
             } else {
                 Ok::<bool, aviutl2::generic::EditSectionError>(false)
             }
         }) {
-            Ok(Ok(true)) => {
-                self.status_message = Some(format!(
-                    "ジャンプして対象オブジェクトを選択しました（L{layer}, F{frame}）。"
-                ));
-            }
+            Ok(Ok(true)) => {}
             Ok(Ok(false)) => {
-                self.status_message = Some(format!(
-                    "ジャンプしました（L{layer}, F{frame} / オブジェクト未検出）。"
-                ));
+                self.status_message = Some(format!("オブジェクトが見つかりませんでした。"));
             }
             Ok(Err(err)) => {
-                self.status_message =
-                    Some(format!("ジャンプ処理に失敗しました（{target_id}）: {err}"));
+                self.status_message = Some(format!("ジャンプ処理に失敗しました: {err}"));
             }
             Err(err) => {
-                self.status_message =
-                    Some(format!("ジャンプ処理に失敗しました（{target_id}）: {err}"));
+                self.status_message = Some(format!("ジャンプ処理に失敗しました: {err}"));
             }
         }
     }
