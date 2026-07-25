@@ -153,16 +153,23 @@ impl ProofreadGuiApp {
                 if ui.button("再読込").clicked() {
                     self.reload_prompt_templates();
                 }
+                if ui.button("開く").clicked() && let Ok(prompts_dir) = crate::prompt::prompts_dir() {
+                    open::that(prompts_dir).ok();
+                }
             });
             ui.add_space(8.0);
-            if ui
+            let start_response = ui
                 .add_sized(
                     egui::vec2(ui.available_width(), 40.0),
                     egui::Button::new("校正を開始"),
                 )
-                .clicked()
-            {
-                self.start_proofread();
+                .on_hover_text("Shift+クリックでMarkdownをコピー");
+            if start_response.clicked() {
+                if ui.input(|input| input.modifiers.shift) {
+                    self.copy_prompt_markdown(ui.ctx());
+                } else {
+                    self.start_proofread();
+                }
             }
             ui.add_space(12.0);
             ui.label("プロンプト:");
@@ -522,6 +529,46 @@ impl ProofreadGuiApp {
         self.proofreading_rx = Some(rx);
         self.clear_status_message();
         self.screen = Screen::Running;
+    }
+
+    fn copy_prompt_markdown(&mut self, context: &egui::Context) {
+        self.status_message = None;
+        let (project_prompt, prompt_template_id) = {
+            let state = self.state.lock().expect("project state lock poisoned");
+            (
+                state.project_prompt.clone(),
+                state.prompt_template_id.clone(),
+            )
+        };
+        let project_info = match crate::scan::collect_project_info() {
+            Ok(value) => value,
+            Err(err) => {
+                self.status_message = Some(format!("プロジェクト情報の取得に失敗しました: {err}"));
+                return;
+            }
+        };
+        let targets = match crate::scan::collect_marked_targets() {
+            Ok(value) => value,
+            Err(err) => {
+                self.status_message = Some(format!("校正対象の収集に失敗しました: {err}"));
+                return;
+            }
+        };
+        let markdown = match ProofreadService::build_prompt(
+            &prompt_template_id,
+            &project_info,
+            &project_prompt,
+            &targets.targets,
+        ) {
+            Ok(value) => value,
+            Err(err) => {
+                self.status_message = Some(format!("Markdownの生成に失敗しました: {err}"));
+                return;
+            }
+        };
+
+        context.copy_text(markdown);
+        self.status_message = Some("校正用Markdownをコピーしました。".to_string());
     }
 
     fn label_for_template(&self, id: &str) -> String {

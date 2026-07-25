@@ -11,6 +11,7 @@ name = "proofread_aux2"
 aviutl2 = { version = "0.41.0", features = ["serde"] }
 aviutl2-eframe = "0.41.0"
 handlebars = "6.4.1"
+open = "5.4.0"
 process_path = "0.1.4"
 reqwest = { version = "0.13.4", features = ["blocking", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }

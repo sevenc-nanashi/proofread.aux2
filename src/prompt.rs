@@ -56,6 +56,7 @@ pub struct PromptTemplate {
 pub fn initialize_prompts_dir() -> Result<PathBuf, PromptError> {
     let dir = prompts_dir()?;
     std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("default.hbs"), BUILTIN_TEMPLATE_SOURCE)?;
     Ok(dir)
 }
 
@@ -77,6 +78,9 @@ pub fn list_prompt_templates() -> Result<Vec<PromptTemplate>, PromptError> {
                 return None;
             }
             let name = path.file_name()?.to_str()?.to_string();
+            if name == "default.hbs" {
+                return None;
+            }
             Some(PromptTemplate {
                 id: name.clone(),
                 label: format!("外部: {name}"),
@@ -113,6 +117,7 @@ pub fn build_prompt(
                 content: &target.content,
                 color: target.color.as_deref(),
                 memo: target.memo.as_deref().unwrap_or("(なし)"),
+                character_id: target.character_id.as_deref(),
             })
             .collect(),
     };
@@ -136,7 +141,7 @@ fn load_template_source(template_id: &str) -> Result<String, PromptError> {
     Ok(std::fs::read_to_string(path)?)
 }
 
-fn prompts_dir() -> Result<PathBuf, PromptError> {
+pub fn prompts_dir() -> Result<PathBuf, PromptError> {
     if let Some(path) =
         process_path::get_dylib_path().and_then(|v| v.parent().map(|parent| parent.to_path_buf()))
     {
@@ -166,4 +171,5 @@ struct PromptTarget<'a> {
     content: &'a str,
     color: Option<&'a str>,
     memo: &'a str,
+    character_id: Option<&'a str>,
 }

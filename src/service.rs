@@ -44,14 +44,12 @@ impl From<PromptError> for ProofreadServiceError {
 pub struct ProofreadService;
 
 impl ProofreadService {
-    pub fn run(
+    pub fn build_prompt(
         template_id: &str,
         project_info: &str,
         project_prompt: &str,
         targets: &[CollectedTarget],
-        locations: &HashMap<String, ObjectLocation>,
-        credentials: &Credentials,
-    ) -> Result<ProofreadResult, ProofreadServiceError> {
+    ) -> Result<String, ProofreadServiceError> {
         let text_targets: Vec<CollectedTarget> = targets
             .iter()
             .filter(|target| target.target_type == TargetType::Text)
@@ -61,7 +59,23 @@ impl ProofreadService {
             return Err(ProofreadServiceError::NoTextTargets);
         }
 
-        let prompt = build_prompt(template_id, project_info, project_prompt, &text_targets)?;
+        Ok(build_prompt(
+            template_id,
+            project_info,
+            project_prompt,
+            &text_targets,
+        )?)
+    }
+
+    pub fn run(
+        template_id: &str,
+        project_info: &str,
+        project_prompt: &str,
+        targets: &[CollectedTarget],
+        locations: &HashMap<String, ObjectLocation>,
+        credentials: &Credentials,
+    ) -> Result<ProofreadResult, ProofreadServiceError> {
+        let prompt = Self::build_prompt(template_id, project_info, project_prompt, targets)?;
         let client = OpenAiCompatClient::new(
             credentials.base_url.clone(),
             credentials.model.clone(),

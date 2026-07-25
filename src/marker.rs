@@ -171,7 +171,7 @@ impl aviutl2::filter::FilterPlugin for TargetSingleMarker {
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
-        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>
+        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>,
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
@@ -194,7 +194,7 @@ impl aviutl2::filter::FilterPlugin for MemoMarker {
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
-        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>
+        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>,
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
