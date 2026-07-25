@@ -431,7 +431,6 @@ impl ProofreadGuiApp {
         crate::EDIT_HANDLE
             .call_edit_section(|edit| {
                 edit.set_cursor_layer_frame(position.layer, position.start)?;
-                edit.set_display_layer_frame(position.layer, position.start)?;
                 if edit.get_object_layer_frame(object).is_ok() {
                     edit.set_focus_object(Some(object))?;
                     edit.create_effect(object, crate::marker::MEMO_MARKER_NAME)?;
@@ -454,7 +453,6 @@ impl ProofreadGuiApp {
         crate::EDIT_HANDLE
             .call_edit_section(|edit| {
                 edit.set_cursor_layer_frame(position.layer, position.start)?;
-                edit.set_display_layer_frame(position.layer, position.start)?;
                 if edit.get_object_layer_frame(object).is_ok() {
                     edit.set_focus_object(Some(object))?;
                     for effect in edit.get_effects(object)? {
@@ -604,7 +602,6 @@ impl ProofreadGuiApp {
 
         match crate::EDIT_HANDLE.call_edit_section(|edit| {
             edit.set_cursor_layer_frame(layer, frame)?;
-            edit.set_display_layer_frame(layer, frame)?;
             if let Some(handle) = edit.find_object_after(layer, frame)? {
                 edit.set_focus_object(Some(handle))?;
                 Ok::<bool, aviutl2::generic::EditSectionError>(true)
@@ -632,7 +629,6 @@ impl ProofreadGuiApp {
     ) {
         match crate::EDIT_HANDLE.call_edit_section(|edit| {
             edit.set_cursor_layer_frame(position.layer, position.start)?;
-            edit.set_display_layer_frame(position.layer, position.start)?;
             edit.set_focus_object(Some(object))
         }) {
             Ok(Ok(())) => {}
