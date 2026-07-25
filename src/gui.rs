@@ -175,7 +175,7 @@ impl ProofreadGuiApp {
             ui.add_sized(
                 egui::vec2(ui.available_width(), ui.available_height()),
                 egui::TextEdit::multiline(&mut project_prompt)
-                    .hint_text("どのような動画か、どのような視聴者層かなどを入力"),
+                    .hint_text("どのような動画か、どのような視聴者層か、キャラクターの口調はなにか、などを入力"),
             );
             if let Ok(mut state) = self.state.lock() {
                 state.project_prompt = project_prompt;
