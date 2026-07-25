@@ -18,3 +18,8 @@ source = "target/debug/proofread_aux2.dll"
 [artifacts.proofread_aux2-aux2.profiles.release]
 build = "cargo build --release"
 source = "target/release/proofread_aux2.dll"
+
+[catalog]
+id = "sevenc-nanashi.proofread-aux2"
+license_path = "LICENSE"
+download_repo = { owner = "sevenc-nanashi", repo = "proofread.aux2" }
