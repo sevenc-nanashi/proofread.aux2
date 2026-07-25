@@ -342,6 +342,9 @@ impl ProofreadGuiApp {
                             ui.separator();
                             let action = self.render_comment(ui, &detail.comment);
                             if let Some(action) = action {
+                                if matches!(action, DetailAction::Suggestion { .. }) {
+                                    self.set_detail_resolved(detail_index, true);
+                                }
                                 self.process_comment_action(action);
                             }
                         });
@@ -424,8 +427,7 @@ impl ProofreadGuiApp {
                 edit.set_display_layer_frame(position.layer, position.start)?;
                 if edit.get_object_layer_frame(object).is_ok() {
                     edit.set_focus_object(Some(object))?;
-                    // TODO: エフェクトを追加する処理をいれる
-                    // 次のアプデでエフェクト追加APIが入ればいいな...
+                    edit.create_effect(object, crate::marker::MEMO_MARKER_NAME)?;
                     Ok::<bool, aviutl2::generic::EditSectionError>(true)
                 } else {
                     Ok::<bool, aviutl2::generic::EditSectionError>(false)

@@ -135,6 +135,8 @@ pub fn attach_memos(targets: &mut [CollectedTarget], memo_by_target_id: &HashMap
 pub struct TargetLayerMarker;
 
 impl aviutl2::filter::FilterPlugin for TargetLayerMarker {
+    type Userdata = ();
+
     fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
         Ok(Self)
     }
@@ -146,7 +148,7 @@ impl aviutl2::filter::FilterPlugin for TargetLayerMarker {
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
-        _video: &mut aviutl2::filter::FilterProcVideo,
+        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>,
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
@@ -156,6 +158,8 @@ impl aviutl2::filter::FilterPlugin for TargetLayerMarker {
 pub struct TargetSingleMarker;
 
 impl aviutl2::filter::FilterPlugin for TargetSingleMarker {
+    type Userdata = ();
+
     fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
         Ok(Self)
     }
@@ -167,7 +171,7 @@ impl aviutl2::filter::FilterPlugin for TargetSingleMarker {
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
-        _video: &mut aviutl2::filter::FilterProcVideo,
+        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
@@ -177,6 +181,8 @@ impl aviutl2::filter::FilterPlugin for TargetSingleMarker {
 pub struct MemoMarker;
 
 impl aviutl2::filter::FilterPlugin for MemoMarker {
+    type Userdata = ();
+
     fn new(_info: aviutl2::AviUtl2Info) -> aviutl2::AnyResult<Self> {
         Ok(Self)
     }
@@ -188,7 +194,7 @@ impl aviutl2::filter::FilterPlugin for MemoMarker {
     fn proc_video(
         &self,
         _config: &[aviutl2::filter::FilterConfigItem],
-        _video: &mut aviutl2::filter::FilterProcVideo,
+        _video: &mut aviutl2::filter::FilterProcVideo<Self::Userdata>
     ) -> aviutl2::AnyResult<()> {
         Ok(())
     }
