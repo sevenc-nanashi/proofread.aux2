@@ -280,12 +280,12 @@ impl ProofreadGuiApp {
                                     self.jump_to_target_id(&detail.id);
                                 }
                                 if ui.add(egui::Button::new("メモを追加")).clicked() {
-                                    self.status_message =
-                                        Some("メモ追加機能は未実装です。".to_string());
+                                    self.add_memo_to_target(&detail.id);
                                 }
                             });
                             ui.separator();
                             ui.horizontal_wrapped(|ui| {
+                                ui.style_mut().spacing.item_spacing.x = 0.0;
                                 for part in &parsed.parts {
                                     match part {
                                         CommentPart::Text(text) => {
@@ -299,9 +299,7 @@ impl ProofreadGuiApp {
                                             }
                                             DetailAction::Suggestion { replacement } => {
                                                 if ui.link(label).clicked() {
-                                                    self.status_message = Some(format!(
-                                                        "置換適用機能は未実装です（候補: {replacement}）。"
-                                                    ));
+                                                    self.replace_text(&detail.id, replacement);
                                                 }
                                             }
                                         },
@@ -314,6 +312,65 @@ impl ProofreadGuiApp {
                 }
             });
         });
+    }
+
+    fn add_memo_to_target(&mut self, target_id: &str) {
+        let (layer, frame) = match parse_target_id(target_id) {
+            Ok(v) => v,
+            Err(err) => {
+                self.status_message = Some(format!("IDが不正です（{target_id}）: {err}"));
+                return;
+            }
+        };
+        crate::EDIT_HANDLE
+            .call_edit_section(|edit| {
+                edit.set_cursor_layer_frame(layer, frame)?;
+                edit.set_display_layer_frame(layer, frame)?;
+                if let Some(handle) = edit.find_object_after(layer, frame)? {
+                    edit.set_focus_object(Some(handle))?;
+                    // TODO: エフェクトを追加する処理をいれる
+                    // 次のアプデでエフェクト追加APIが入ればいいな...
+                    Ok::<bool, aviutl2::generic::EditSectionError>(true)
+                } else {
+                    Ok::<bool, aviutl2::generic::EditSectionError>(false)
+                }
+            })
+            .map_err(|err| {
+                self.status_message = Some(format!("メモ追加処理に失敗しました: {err}"));
+            })
+            .ok();
+    }
+    fn replace_text(&mut self, target_id: &str, replacement: &str) {
+        let (layer, frame) = match parse_target_id(target_id) {
+            Ok(v) => v,
+            Err(err) => {
+                self.status_message = Some(format!("IDが不正です（{target_id}）: {err}"));
+                return;
+            }
+        };
+        crate::EDIT_HANDLE
+            .call_edit_section(|edit| {
+                edit.set_cursor_layer_frame(layer, frame)?;
+                edit.set_display_layer_frame(layer, frame)?;
+                if let Some(handle) = edit.find_object_after(layer, frame)? {
+                    edit.set_focus_object(Some(handle))?;
+                    for effect in edit.get_effects(handle)? {
+                        if edit
+                            .set_effect_item_value(effect, "テキスト", replacement)
+                            .is_ok()
+                        {
+                            break;
+                        }
+                    }
+                    Ok::<bool, aviutl2::generic::EditSectionError>(true)
+                } else {
+                    Ok::<bool, aviutl2::generic::EditSectionError>(false)
+                }
+            })
+            .map_err(|err| {
+                self.status_message = Some(format!("テキスト置換処理に失敗しました: {err}"));
+            })
+            .ok();
     }
 
     fn render_running(&mut self, ui: &mut egui::Ui) {
