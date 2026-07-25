@@ -19,6 +19,10 @@ source = "target/debug/proofread_aux2.dll"
 build = "cargo build --release"
 source = "target/release/proofread_aux2.dll"
 
+[release]
+prebuild = "cargo about generate about.hbs -o ./release/package.txt"
+package_template = "release/package.txt"
+
 [catalog]
 id = "sevenc-nanashi.proofread-aux2"
 license_path = "LICENSE"
