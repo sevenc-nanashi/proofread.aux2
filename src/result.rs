@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use aviutl2::generic::{ObjectHandle, ObjectLayerFrame};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Priority {
@@ -18,20 +20,35 @@ impl Priority {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ProofreadDetail {
-    pub id: String,
+    pub object: ObjectHandle,
+    pub position: ObjectLayerFrame,
     pub priority: Priority,
     pub comment: String,
+    pub resolved: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ProofreadResult {
     pub all: String,
     pub details: Vec<ProofreadDetail>,
 }
 
-impl ProofreadResult {
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct RawProofreadDetail {
+    pub id: String,
+    pub priority: Priority,
+    pub comment: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub(crate) struct RawProofreadResult {
+    pub all: String,
+    pub details: Vec<RawProofreadDetail>,
+}
+
+impl RawProofreadResult {
     pub fn from_json(input: &str) -> serde_json::Result<Self> {
         serde_json::from_str(input)
     }
@@ -121,7 +138,7 @@ fn parse_directive(input: &str) -> Option<(String, DetailAction)> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CommentPart, DetailAction, Priority, ProofreadResult, parse_detail_comment_actions,
+        CommentPart, DetailAction, Priority, RawProofreadResult, parse_detail_comment_actions,
     };
 
     #[test]
@@ -130,7 +147,7 @@ mod tests {
             "all":"全体コメント",
             "details":[{"id":"t-1","priority":"high","comment":"修正してください"}]
         }"#;
-        let result = ProofreadResult::from_json(input).expect("must parse");
+        let result = RawProofreadResult::from_json(input).expect("must parse");
         assert_eq!(result.all, "全体コメント");
         assert_eq!(result.details.len(), 1);
         assert_eq!(result.details[0].id, "t-1");
@@ -143,7 +160,7 @@ mod tests {
             "all":"x",
             "details":[{"id":"t-1","priority":"urgent","comment":"x"}]
         }"#;
-        let parsed = ProofreadResult::from_json(input);
+        let parsed = RawProofreadResult::from_json(input);
         assert!(parsed.is_err());
     }
 

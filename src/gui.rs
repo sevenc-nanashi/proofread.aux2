@@ -9,7 +9,7 @@ use crate::service::ProofreadService;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Screen {
-    SetupRun,
+    Prepare,
     Settings,
     Running,
     Result,
@@ -53,7 +53,7 @@ impl ProofreadGuiApp {
 
         let (screen, credentials_path, credentials, credentials_status) = match credentials_path() {
             Ok(path) => match load_credentials(&path) {
-                Ok(credentials) => (Screen::SetupRun, Some(path), credentials, None),
+                Ok(credentials) => (Screen::Prepare, Some(path), credentials, None),
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => (
                     Screen::Settings,
                     Some(path),
@@ -105,7 +105,11 @@ impl ProofreadGuiApp {
             ui.horizontal(|ui| {
                 ui.heading("proofread.aux2");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("設定").clicked() {
+                    // if ui.button("設定").clicked() {
+                    if ui
+                        .add_enabled(self.screen == Screen::Prepare, egui::Button::new("設定"))
+                        .clicked()
+                    {
                         self.clear_status_message();
                         self.screen = Screen::Settings;
                     }
@@ -186,57 +190,90 @@ impl ProofreadGuiApp {
                 ui.add_space(8.0);
             }
 
-            let mut selected_preset = self.credentials.preset;
-            egui::ComboBox::from_label("プリセット")
-                .selected_text(selected_preset.display_name())
-                .show_ui(ui, |ui| {
-                    for preset in Preset::ALL {
-                        ui.selectable_value(&mut selected_preset, preset, preset.display_name());
+            ui.vertical(|ui| {
+                let mut selected_preset = self.credentials.preset;
+                let full_width = ui.available_width();
+                let full_width_size = egui::Vec2 {
+                    x: full_width,
+                    y: 32.0,
+                };
+                ui.label("プリセット");
+                egui::ComboBox::new("preset", "")
+                    .selected_text(selected_preset.display_name())
+                    .width(full_width)
+                    .show_ui(ui, |ui| {
+                        for preset in Preset::ALL {
+                            ui.selectable_value(
+                                &mut selected_preset,
+                                preset,
+                                preset.display_name(),
+                            );
+                        }
+                    });
+                if selected_preset != self.credentials.preset {
+                    self.credentials.preset = selected_preset;
+                    let defaults = selected_preset.defaults();
+                    self.credentials.base_url = defaults.base_url.to_string();
+                    self.credentials.model = defaults.model.to_string();
+                }
+
+                ui.add_space(8.0);
+                ui.label("エンドポイント");
+                // ui.text_edit_singleline(&mut self.credentials.base_url);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.credentials.base_url)
+                        .hint_text("例: https://api.openai.com/v1")
+                        .font(egui::TextStyle::Monospace)
+                        .min_size(full_width_size),
+                );
+                ui.add_space(4.0);
+                ui.label("モデル");
+                // ui.text_edit_singleline(&mut self.credentials.model);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.credentials.model)
+                        .hint_text("例: gpt-5.5")
+                        .font(egui::TextStyle::Monospace)
+                        .min_size(full_width_size),
+                );
+                ui.add_space(4.0);
+                ui.label("APIキー");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.credentials.api_key)
+                        .password(true)
+                        .font(egui::TextStyle::Monospace)
+                        .min_size(full_width_size),
+                );
+                ui.add_space(4.0);
+                let key_url = self.credentials.preset.defaults().key_url;
+                ui.hyperlink_to("APIキーの発行ページを開く", key_url);
+                ui.add_space(12.0);
+
+                ui.columns_const(|[left, right]| {
+                    let can_save = self.credentials_path.is_some()
+                        && !self.credentials.base_url.trim().is_empty()
+                        && !self.credentials.model.trim().is_empty()
+                        && !self.credentials.api_key.trim().is_empty();
+                    let save_response = left.add_enabled(can_save, egui::Button::new("保存"));
+                    if save_response.clicked()
+                        && let Some(path) = &self.credentials_path
+                    {
+                        match save_credentials(path, &self.credentials) {
+                            Ok(_) => {
+                                self.status_message = Some("設定を保存しました。".to_string());
+                                self.screen = Screen::Prepare;
+                            }
+                            Err(err) => {
+                                self.status_message =
+                                    Some(format!("設定の保存に失敗しました: {err}"));
+                            }
+                        }
+                    }
+
+                    if right.button("戻る").clicked() && self.credentials_path.is_some() {
+                        self.screen = Screen::Prepare;
                     }
                 });
-            if selected_preset != self.credentials.preset {
-                self.credentials.preset = selected_preset;
-                let defaults = selected_preset.defaults();
-                self.credentials.base_url = defaults.base_url.to_string();
-                self.credentials.model = defaults.model.to_string();
-            }
-
-            ui.add_space(8.0);
-            ui.label("エンドポイント");
-            ui.text_edit_singleline(&mut self.credentials.base_url);
-            ui.add_space(4.0);
-            ui.label("モデル");
-            ui.text_edit_singleline(&mut self.credentials.model);
-            ui.add_space(4.0);
-            ui.label("APIキー");
-            ui.add(egui::TextEdit::singleline(&mut self.credentials.api_key).password(true));
-            ui.add_space(4.0);
-            let key_url = self.credentials.preset.defaults().key_url;
-            ui.hyperlink_to("APIキーの発行ページを開く", key_url);
-            ui.add_space(12.0);
-
-            let can_save = self.credentials_path.is_some()
-                && !self.credentials.base_url.trim().is_empty()
-                && !self.credentials.model.trim().is_empty()
-                && !self.credentials.api_key.trim().is_empty();
-            let save_response = ui.add_enabled(can_save, egui::Button::new("保存"));
-            if save_response.clicked()
-                && let Some(path) = &self.credentials_path
-            {
-                match save_credentials(path, &self.credentials) {
-                    Ok(_) => {
-                        self.status_message = Some("設定を保存しました。".to_string());
-                        self.screen = Screen::SetupRun;
-                    }
-                    Err(err) => {
-                        self.status_message = Some(format!("設定の保存に失敗しました: {err}"));
-                    }
-                }
-            }
-
-            if ui.button("戻る").clicked() && self.credentials_path.is_some() {
-                self.screen = Screen::SetupRun;
-            }
+            });
         });
     }
 
@@ -254,58 +291,59 @@ impl ProofreadGuiApp {
                 .clicked()
             {
                 self.clear_status_message();
-                self.screen = Screen::SetupRun;
+                self.screen = Screen::Prepare;
             }
             ui.add_space(8.0);
             ui.group(|ui| {
                 ui.label("全体の指摘・コメント");
                 ui.separator();
-                let all = self
-                    .result
-                    .as_ref()
-                    .map(|v| v.all.as_str())
-                    .unwrap_or("（まだ結果はありません）");
-                ui.label(all);
+                if let Some(all) = self.result.as_ref().map(|v| v.all.as_str()) {
+                    let action = self.render_comment(ui, all);
+                    if let Some(action) = action {
+                        self.process_comment_action(action);
+                    }
+                } else {
+                    ui.label("校正結果がありません。");
+                }
             });
             ui.add_space(8.0);
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if let Some(result) = self.result.clone() {
-                    for detail in &result.details {
-                        let parsed = parse_detail_comment_actions(&detail.comment);
+                    for detail_index in
+                        resolved_last_indices(result.details.iter().map(|detail| detail.resolved))
+                    {
+                        let detail = &result.details[detail_index];
                         ui.group(|ui| {
-                            ui.label(format!("位置: {}", detail.id));
+                            if detail.resolved {
+                                ui.set_opacity(0.55);
+                            }
+                            ui.label(format!(
+                                "位置: レイヤー{} / フレーム{}",
+                                detail.position.layer + 1,
+                                detail.position.start + 1
+                            ));
                             ui.label(format!("優先度: {}", detail.priority.label_ja()));
                             ui.horizontal(|ui| {
                                 if ui.add(egui::Button::new("ジャンプ")).clicked() {
-                                    self.jump_to_target_id(&detail.id);
+                                    self.jump_to_object(detail.object, detail.position);
                                 }
                                 if ui.add(egui::Button::new("メモを追加")).clicked() {
-                                    self.add_memo_to_target(&detail.id);
+                                    self.add_memo_to_object(detail.object, detail.position);
+                                }
+                                let resolved_button_label = if detail.resolved {
+                                    "未解決に戻す"
+                                } else {
+                                    "解決済にする"
+                                };
+                                if ui.add(egui::Button::new(resolved_button_label)).clicked() {
+                                    self.set_detail_resolved(detail_index, !detail.resolved);
                                 }
                             });
                             ui.separator();
-                            ui.horizontal_wrapped(|ui| {
-                                ui.style_mut().spacing.item_spacing.x = 0.0;
-                                for part in &parsed.parts {
-                                    match part {
-                                        CommentPart::Text(text) => {
-                                            ui.label(text);
-                                        }
-                                        CommentPart::Action { label, action } => match action {
-                                            DetailAction::Jump { target_id } => {
-                                                if ui.link(label).clicked() {
-                                                    self.jump_to_target_id(target_id);
-                                                }
-                                            }
-                                            DetailAction::Suggestion { replacement } => {
-                                                if ui.link(label).clicked() {
-                                                    self.replace_text(&detail.id, replacement);
-                                                }
-                                            }
-                                        },
-                                    }
-                                }
-                            });
+                            let action = self.render_comment(ui, &detail.comment);
+                            if let Some(action) = action {
+                                self.process_comment_action(action);
+                            }
                         });
                         ui.add_space(4.0);
                     }
@@ -314,20 +352,78 @@ impl ProofreadGuiApp {
         });
     }
 
-    fn add_memo_to_target(&mut self, target_id: &str) {
-        let (layer, frame) = match parse_target_id(target_id) {
-            Ok(v) => v,
-            Err(err) => {
-                self.status_message = Some(format!("IDが不正です（{target_id}）: {err}"));
-                return;
+    fn set_detail_resolved(&mut self, detail_index: usize, resolved: bool) {
+        let result = self
+            .result
+            .as_mut()
+            .expect("proofreading result must exist while rendering results");
+        let detail = result
+            .details
+            .get_mut(detail_index)
+            .expect("rendered detail index must exist");
+        detail.resolved = resolved;
+    }
+
+    fn render_comment(
+        &self,
+        ui: &mut egui::Ui,
+        comment: &str,
+    ) -> Option<crate::result::DetailAction> {
+        let parsed = parse_detail_comment_actions(comment);
+        let mut action_to_return = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.style_mut().spacing.item_spacing.x = 0.0;
+            for part in &parsed.parts {
+                match part {
+                    CommentPart::Text(text) => {
+                        ui.label(text);
+                    }
+                    CommentPart::Action { label, action } => {
+                        let response = ui.link(label);
+                        if let DetailAction::Jump { target_id } = action
+                            && let Ok(tooltip) = jump_target_tooltip(target_id)
+                        {
+                            response.clone().on_hover_text(tooltip);
+                        }
+                        if response.clicked() {
+                            action_to_return = Some(action.clone());
+                        }
+                    }
+                }
             }
-        };
+        });
+
+        action_to_return
+    }
+    fn process_comment_action(&mut self, action: crate::result::DetailAction) {
+        match action {
+            DetailAction::Jump { target_id } => {
+                self.jump_to_target_id(&target_id);
+            }
+            DetailAction::Suggestion { replacement } => {
+                if let Some(result) = &self.result {
+                    for detail in &result.details {
+                        if detail.comment.contains(&replacement) {
+                            self.replace_text(detail.object, detail.position, &replacement);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn add_memo_to_object(
+        &mut self,
+        object: aviutl2::generic::ObjectHandle,
+        position: aviutl2::generic::ObjectLayerFrame,
+    ) {
         crate::EDIT_HANDLE
             .call_edit_section(|edit| {
-                edit.set_cursor_layer_frame(layer, frame)?;
-                edit.set_display_layer_frame(layer, frame)?;
-                if let Some(handle) = edit.find_object_after(layer, frame)? {
-                    edit.set_focus_object(Some(handle))?;
+                edit.set_cursor_layer_frame(position.layer, position.start)?;
+                edit.set_display_layer_frame(position.layer, position.start)?;
+                if edit.get_object_layer_frame(object).is_ok() {
+                    edit.set_focus_object(Some(object))?;
                     // TODO: エフェクトを追加する処理をいれる
                     // 次のアプデでエフェクト追加APIが入ればいいな...
                     Ok::<bool, aviutl2::generic::EditSectionError>(true)
@@ -340,21 +436,19 @@ impl ProofreadGuiApp {
             })
             .ok();
     }
-    fn replace_text(&mut self, target_id: &str, replacement: &str) {
-        let (layer, frame) = match parse_target_id(target_id) {
-            Ok(v) => v,
-            Err(err) => {
-                self.status_message = Some(format!("IDが不正です（{target_id}）: {err}"));
-                return;
-            }
-        };
+    fn replace_text(
+        &mut self,
+        object: aviutl2::generic::ObjectHandle,
+        position: aviutl2::generic::ObjectLayerFrame,
+        replacement: &str,
+    ) {
         crate::EDIT_HANDLE
             .call_edit_section(|edit| {
-                edit.set_cursor_layer_frame(layer, frame)?;
-                edit.set_display_layer_frame(layer, frame)?;
-                if let Some(handle) = edit.find_object_after(layer, frame)? {
-                    edit.set_focus_object(Some(handle))?;
-                    for effect in edit.get_effects(handle)? {
+                edit.set_cursor_layer_frame(position.layer, position.start)?;
+                edit.set_display_layer_frame(position.layer, position.start)?;
+                if edit.get_object_layer_frame(object).is_ok() {
+                    edit.set_focus_object(Some(object))?;
+                    for effect in edit.get_effects(object)? {
                         if edit
                             .set_effect_item_value(effect, "テキスト", replacement)
                             .is_ok()
@@ -416,7 +510,8 @@ impl ProofreadGuiApp {
                 &prompt_template_id,
                 &project_info,
                 &project_prompt,
-                &targets,
+                &targets.targets,
+                &targets.locations,
                 &credentials,
             )
             .map_err(|err| err.to_string());
@@ -481,6 +576,26 @@ impl ProofreadGuiApp {
         }
     }
 
+    fn jump_to_object(
+        &mut self,
+        object: aviutl2::generic::ObjectHandle,
+        position: aviutl2::generic::ObjectLayerFrame,
+    ) {
+        match crate::EDIT_HANDLE.call_edit_section(|edit| {
+            edit.set_cursor_layer_frame(position.layer, position.start)?;
+            edit.set_display_layer_frame(position.layer, position.start)?;
+            edit.set_focus_object(Some(object))
+        }) {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                self.status_message = Some(format!("ジャンプ処理に失敗しました: {err}"));
+            }
+            Err(err) => {
+                self.status_message = Some(format!("ジャンプ処理に失敗しました: {err}"));
+            }
+        }
+    }
+
     fn poll_proofreading_result(&mut self) {
         let Some(rx) = &self.proofreading_rx else {
             return;
@@ -494,17 +609,40 @@ impl ProofreadGuiApp {
             }
             Ok(Err(err_message)) => {
                 self.status_message = Some(format!("校正に失敗しました: {err_message}"));
-                self.screen = Screen::SetupRun;
+                self.screen = Screen::Prepare;
                 self.proofreading_rx = None;
             }
             Err(mpsc::TryRecvError::Empty) => {}
             Err(mpsc::TryRecvError::Disconnected) => {
                 self.status_message = Some("校正処理が中断されました。".to_string());
-                self.screen = Screen::SetupRun;
+                self.screen = Screen::Prepare;
                 self.proofreading_rx = None;
             }
         }
     }
+}
+
+fn resolved_last_indices(resolved: impl IntoIterator<Item = bool>) -> Vec<usize> {
+    let mut unresolved = Vec::new();
+    let mut resolved_indices = Vec::new();
+    for (index, is_resolved) in resolved.into_iter().enumerate() {
+        if is_resolved {
+            resolved_indices.push(index);
+        } else {
+            unresolved.push(index);
+        }
+    }
+    unresolved.extend(resolved_indices);
+    unresolved
+}
+
+fn jump_target_tooltip(target_id: &str) -> Result<String, &'static str> {
+    let (layer, frame) = parse_target_id(target_id)?;
+    Ok(format!(
+        "ジャンプ先: レイヤー{} / フレーム{}",
+        layer + 1,
+        frame + 1
+    ))
 }
 
 fn parse_target_id(input: &str) -> Result<(usize, usize), &'static str> {
@@ -532,7 +670,7 @@ impl eframe::App for ProofreadGuiApp {
         self.poll_proofreading_result();
         self.render_header(ui);
         match self.screen {
-            Screen::SetupRun => self.render_setup_run(ui),
+            Screen::Prepare => self.render_setup_run(ui),
             Screen::Settings => self.render_settings(ui),
             Screen::Running => self.render_running(ui),
             Screen::Result => self.render_result(ui),
@@ -550,7 +688,7 @@ pub(crate) fn create_gui(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_target_id;
+    use super::{jump_target_tooltip, parse_target_id, resolved_last_indices};
 
     #[test]
     fn parse_target_id_extracts_layer_and_frame() {
@@ -562,5 +700,22 @@ mod tests {
         assert!(parse_target_id("f32-n10").is_err());
         assert!(parse_target_id("l10-n10").is_err());
         assert!(parse_target_id("abc").is_err());
+    }
+
+    #[test]
+    fn resolved_details_are_ordered_last_stably() {
+        assert_eq!(
+            resolved_last_indices([true, false, true, false]),
+            vec![1, 3, 0, 2]
+        );
+    }
+
+    #[test]
+    fn jump_target_tooltip_describes_destination() {
+        assert_eq!(
+            jump_target_tooltip("l10-f32-n10").as_deref(),
+            Ok("ジャンプ先: レイヤー11 / フレーム33")
+        );
+        assert!(jump_target_tooltip("invalid").is_err());
     }
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::result::ProofreadResult;
+use crate::result::RawProofreadResult;
 
 #[derive(Debug, Clone)]
 pub struct OpenAiCompatClient {
@@ -24,7 +24,10 @@ impl OpenAiCompatClient {
         }
     }
 
-    pub fn request_proofread(&self, prompt: &str) -> Result<ProofreadResult, ClientError> {
+    pub(crate) fn request_proofread(
+        &self,
+        prompt: &str,
+    ) -> Result<RawProofreadResult, ClientError> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = ChatCompletionsRequest {
             model: self.model.clone(),
@@ -51,7 +54,7 @@ impl OpenAiCompatClient {
             .first()
             .map(|choice| choice.message.content.clone())
             .ok_or(ClientError::EmptyChoices)?;
-        let result = ProofreadResult::from_json(&content).map_err(ClientError::ParseResult)?;
+        let result = RawProofreadResult::from_json(&content).map_err(ClientError::ParseResult)?;
         Ok(result)
     }
 }

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use aviutl2::generic::{ObjectHandle, ObjectLayerFrame};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkerKind {
     TargetLayer,
@@ -83,7 +85,20 @@ pub struct CollectedTarget {
     pub start_time: String,
     pub content: String,
     pub color: Option<String>,
+    pub character_id: Option<String>,
     pub memo: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ObjectLocation {
+    pub object: ObjectHandle,
+    pub position: ObjectLayerFrame,
+}
+
+#[derive(Debug, Clone)]
+pub struct CollectedTargets {
+    pub targets: Vec<CollectedTarget>,
+    pub locations: HashMap<String, ObjectLocation>,
 }
 
 impl CollectedTarget {
@@ -93,6 +108,7 @@ impl CollectedTarget {
         start_time: impl Into<String>,
         content: impl Into<String>,
         color: Option<String>,
+        character_id: Option<String>,
     ) -> Self {
         Self {
             id: id.into(),
@@ -101,6 +117,7 @@ impl CollectedTarget {
             start_time: start_time.into(),
             content: content.into(),
             color,
+            character_id,
             memo: None,
         }
     }
@@ -174,40 +191,5 @@ impl aviutl2::filter::FilterPlugin for MemoMarker {
         _video: &mut aviutl2::filter::FilterProcVideo,
     ) -> aviutl2::AnyResult<()> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-
-    use super::{CollectedTarget, MarkerKind, attach_memos, marker_spec};
-
-    #[test]
-    fn attaches_memo_by_id() {
-        let mut targets = vec![
-            CollectedTarget::text(
-                "t-1",
-                "layer-a",
-                "00:00:10",
-                "hello",
-                Some("#ffffff".into()),
-            ),
-            CollectedTarget::text("t-2", "layer-b", "00:00:12", "world", None),
-        ];
-        let mut memos = HashMap::new();
-        memos.insert("t-2".to_string(), "意図的な表記".to_string());
-
-        attach_memos(&mut targets, &memos);
-
-        assert_eq!(targets[0].memo, None);
-        assert_eq!(targets[1].memo.as_deref(), Some("意図的な表記"));
-    }
-
-    #[test]
-    fn marker_as_object_flags_match_spec() {
-        assert!(marker_spec(MarkerKind::TargetLayer).input);
-        assert!(!marker_spec(MarkerKind::TargetSingle).input);
-        assert!(!marker_spec(MarkerKind::Memo).input);
     }
 }

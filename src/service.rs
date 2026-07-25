@@ -1,14 +1,17 @@
 use crate::client::{ClientError, OpenAiCompatClient};
 use crate::config::Credentials;
-use crate::marker::{CollectedTarget, TargetType};
+use std::collections::HashMap;
+
+use crate::marker::{CollectedTarget, ObjectLocation, TargetType};
 use crate::prompt::{PromptError, build_prompt};
-use crate::result::ProofreadResult;
+use crate::result::{ProofreadDetail, ProofreadResult};
 
 #[derive(Debug)]
 pub enum ProofreadServiceError {
     NoTextTargets,
     Prompt(PromptError),
     Client(ClientError),
+    UnknownTarget(String),
 }
 
 impl std::fmt::Display for ProofreadServiceError {
@@ -17,6 +20,9 @@ impl std::fmt::Display for ProofreadServiceError {
             Self::NoTextTargets => write!(f, "no text targets found"),
             Self::Prompt(err) => write!(f, "{err}"),
             Self::Client(err) => write!(f, "{err}"),
+            Self::UnknownTarget(id) => {
+                write!(f, "proofreading result references unknown target: {id}")
+            }
         }
     }
 }
@@ -43,6 +49,7 @@ impl ProofreadService {
         project_info: &str,
         project_prompt: &str,
         targets: &[CollectedTarget],
+        locations: &HashMap<String, ObjectLocation>,
         credentials: &Credentials,
     ) -> Result<ProofreadResult, ProofreadServiceError> {
         let text_targets: Vec<CollectedTarget> = targets
@@ -60,13 +67,34 @@ impl ProofreadService {
             credentials.model.clone(),
             credentials.api_key.clone(),
         );
-        let result = client.request_proofread(&prompt)?;
-        Ok(result)
+        let raw_result = client.request_proofread(&prompt)?;
+        let details = raw_result
+            .details
+            .into_iter()
+            .map(|detail| {
+                let location = locations
+                    .get(&detail.id)
+                    .ok_or_else(|| ProofreadServiceError::UnknownTarget(detail.id.clone()))?;
+                Ok(ProofreadDetail {
+                    object: location.object,
+                    position: location.position,
+                    priority: detail.priority,
+                    comment: detail.comment,
+                    resolved: false,
+                })
+            })
+            .collect::<Result<Vec<_>, ProofreadServiceError>>()?;
+        Ok(ProofreadResult {
+            all: raw_result.all,
+            details,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::config::Credentials;
 
     use super::{ProofreadService, ProofreadServiceError};
@@ -78,6 +106,7 @@ mod tests {
             "project",
             "prompt",
             &[],
+            &HashMap::new(),
             &Credentials::default(),
         );
         assert!(matches!(result, Err(ProofreadServiceError::NoTextTargets)));

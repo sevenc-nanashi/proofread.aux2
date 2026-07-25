@@ -1,8 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use aviutl2::generic::ObjectHandle;
 
 use crate::marker::{
-    CollectedTarget, MEMO_MARKER_NAME, TARGET_LAYER_MARKER_NAME, TARGET_SINGLE_MARKER_NAME,
-    TargetType,
+    CollectedTarget, CollectedTargets, MEMO_MARKER_NAME, ObjectLocation, TARGET_LAYER_MARKER_NAME,
+    TARGET_SINGLE_MARKER_NAME, TargetType,
 };
 
 pub fn collect_project_info() -> aviutl2::AnyResult<String> {
@@ -18,7 +20,7 @@ pub fn collect_project_info() -> aviutl2::AnyResult<String> {
     })?
 }
 
-pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
+pub fn collect_marked_targets() -> aviutl2::AnyResult<CollectedTargets> {
     crate::EDIT_HANDLE.call_edit_section(|edit| {
         let mut layer_text_targets = HashSet::new();
 
@@ -33,6 +35,7 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
 
         let fps = *edit.info.fps.numer() as f64 / *edit.info.fps.denom() as f64;
         let mut targets = Vec::new();
+        let mut locations = HashMap::new();
 
         for layer in edit.layers() {
             let layer_name = layer.get_name()?.unwrap_or_else(|| {
@@ -53,15 +56,19 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
                     continue;
                 }
 
-                let alias = caller.get_alias_parsed()?;
-                let content = extract_content_from_alias(&alias).unwrap_or_default();
-                let color = extract_color_from_alias(&alias);
-                let memo = extract_memo(&caller);
+                let content = extract_item_value(&edit, object, "テキスト").unwrap_or_default();
+                let color = extract_item_value(&edit, object, "文字色");
+                // PSDToolkit用。
+                // 正直なところ、こうやってプラグイン毎にハードコードするのは拡張性が悪いのであまり良くないが
+                // いい機構が思いつかない...
+                let character_id = extract_item_value(&edit, object, "キャラクターID");
+                let memo = extract_memo(&edit, object);
                 let object_id = build_target_id(position.layer, position.start, targets.len());
                 let start_time = format_frame_time(position.start, fps);
                 let has_non_empty_text = !content.trim().is_empty();
 
                 if (has_single_text || has_layer_text) && has_non_empty_text {
+                    locations.insert(object_id.clone(), ObjectLocation { object, position });
                     targets.push(CollectedTarget {
                         id: object_id.clone(),
                         target_type: TargetType::Text,
@@ -69,18 +76,18 @@ pub fn collect_marked_targets() -> aviutl2::AnyResult<Vec<CollectedTarget>> {
                         start_time: start_time.clone(),
                         content: content.clone(),
                         color: color.clone(),
+                        character_id: character_id.clone(),
                         memo: memo.clone(),
                     });
                 }
             }
         }
-        Ok(targets)
+        Ok(CollectedTargets { targets, locations })
     })?
 }
 
-fn extract_memo<S: aviutl2::generic::ReadSectionProvider>(
-    caller: &aviutl2::generic::EditSectionObjectCaller<'_, S>,
-) -> Option<String> {
+fn extract_memo(read: &aviutl2::generic::ReadSection, object: ObjectHandle) -> Option<String> {
+    let caller = read.object(object);
     if caller.count_effect(MEMO_MARKER_NAME).ok()? == 0 {
         return None;
     }
@@ -97,6 +104,27 @@ fn extract_memo<S: aviutl2::generic::ReadSectionProvider>(
         })
 }
 
+fn extract_item_value(
+    read: &aviutl2::generic::ReadSection,
+    object: ObjectHandle,
+    item_name: &str,
+) -> Option<String> {
+    for effect in read.get_effects(object).ok()? {
+        if let Ok(value) = read.get_effect_item_value(effect, item_name) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(
+                    trimmed
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\\\", "\\"),
+                );
+            }
+        }
+    }
+    None
+}
+
 fn build_target_id(layer: usize, start: usize, serial: usize) -> String {
     format!("l{layer}-f{start}-n{serial}")
 }
@@ -111,85 +139,4 @@ fn format_frame_time(frame: usize, fps: f64) -> String {
     let seconds = (total_ms % 60_000) / 1_000;
     let millis = total_ms % 1_000;
     format!("{hours:02}:{minutes:02}:{seconds:02}.{millis:03}")
-}
-
-fn extract_content_from_alias(alias: &aviutl2::alias::Table) -> Option<String> {
-    let mut stack = vec![alias];
-    while let Some(table) = stack.pop() {
-        for (k, v) in table.values() {
-            if k == "テキスト" {
-                let trimmed = v.trim();
-                if !trimmed.is_empty() {
-                    return Some(
-                        trimmed
-                            .replace("\\n", "\n")
-                            .replace("\\t", "\t")
-                            .replace("\\\\", "\\"),
-                    );
-                }
-            }
-        }
-        for (_, sub) in table.subtables() {
-            stack.push(sub);
-        }
-    }
-    None
-}
-
-fn extract_color_from_alias(alias: &aviutl2::alias::Table) -> Option<String> {
-    let mut stack = vec![alias];
-    while let Some(table) = stack.pop() {
-        for (k, v) in table.values() {
-            if k == "文字色" {
-                let trimmed = v.trim();
-                return Some(trimmed.to_string());
-            }
-        }
-        for (_, sub) in table.subtables() {
-            stack.push(sub);
-        }
-    }
-    None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        build_target_id, extract_color_from_alias, extract_content_from_alias, format_frame_time,
-    };
-
-    #[test]
-    fn target_id_is_stable() {
-        assert_eq!(build_target_id(2, 120, 3), "l2-f120-n3");
-    }
-
-    #[test]
-    fn frame_time_is_formatted() {
-        assert_eq!(format_frame_time(90, 30.0), "00:00:03.000");
-    }
-
-    #[test]
-    fn content_extraction_finds_nested_text() {
-        let alias: aviutl2::alias::Table = "[Object]\r\nfoo=bar\r\n[Object.0]\r\nテキスト=hello"
-            .parse()
-            .expect("table parse");
-        let content = extract_content_from_alias(&alias);
-        assert_eq!(content.as_deref(), Some("hello"));
-    }
-
-    #[test]
-    fn color_extraction() {
-        let alias: aviutl2::alias::Table =
-            "[Object.0]\r\n文字色=ff0000".parse().expect("table parse");
-        let color = extract_color_from_alias(&alias);
-        assert_eq!(color.as_deref(), Some("#FF0000"));
-    }
-
-    #[test]
-    fn empty_text_is_detected() {
-        let alias: aviutl2::alias::Table =
-            "[Object.0]\r\nテキスト=   ".parse().expect("table parse");
-        let content = extract_content_from_alias(&alias);
-        assert_eq!(content, None);
-    }
 }

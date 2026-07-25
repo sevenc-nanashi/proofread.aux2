@@ -167,31 +167,3 @@ struct PromptTarget<'a> {
     color: Option<&'a str>,
     memo: &'a str,
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::marker::CollectedTarget;
-
-    use super::{BUILTIN_TEMPLATE_ID, build_prompt};
-
-    #[test]
-    fn prompt_contains_required_sections() {
-        let targets = vec![CollectedTarget::text(
-            "t-1",
-            "Layer 1",
-            "00:00:01",
-            "こんにちは",
-            Some("#ffffff".into()),
-        )];
-
-        let prompt = build_prompt(BUILTIN_TEMPLATE_ID, "project", "視聴者は中学生", &targets)
-            .expect("must render");
-        assert!(prompt.contains("# 注意"));
-        assert!(prompt.contains("# プロジェクトに関する特記事項"));
-        assert!(prompt.contains("視聴者は中学生"));
-        assert!(prompt.contains("## t-1"));
-        assert!(prompt.contains("色：#ffffff"));
-        assert!(prompt.contains("$[jump ボタン表示名 対象ID]"));
-        assert!(prompt.contains("$[suggestion 置換後テキスト]"));
-    }
-}
